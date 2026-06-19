@@ -1,0 +1,35 @@
+version: "1"
+
+source:
+  path: ./data/outings.json
+
+output:
+  format: json
+  indent: 2
+
+handlers:
+  root:
+    each: true
+    filter: ".distance_miles > 0"
+    fields:
+      id: ".id"
+      title: ".name | ascii_downcase"
+      date: '.date | strptime("%Y-%m-%d") | strftime("%d/%m/%Y")'
+      distance_km: ".distance_miles * 1.60934 | round2"
+      tags: "[.tags[] | ascii_upcase]"
+      location:
+        handler: county
+        input: ".location"
+
+  county:
+    fields:
+      name: ".county"
+      slug: ".county | slugify"
+      country:
+        handler: country
+        input: "."
+
+  country:
+    fields:
+      name: ".country"
+      code: ".country_code | ascii_upcase"

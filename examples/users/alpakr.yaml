@@ -1,0 +1,40 @@
+# Demonstrates:
+#   - input selector to extract nested collection (.users)
+#   - filter to drop suspended accounts
+#   - field renaming (user_id -> id, email_address -> email)
+#   - computed field (full_name from two source fields)
+#   - unix timestamp -> ISO date string
+#   - sub-handler for address restructure
+#   - null coalescing for optional field (line2)
+
+version: "1"
+
+source:
+  path: ./data/users.json
+
+output:
+  format: json
+  indent: 2
+
+handlers:
+  root:
+    input: ".users"
+    each: true
+    filter: '.status == "active"'
+    fields:
+      id:        ".user_id"
+      full_name: '.first_name + " " + .last_name'
+      email:     ".email_address"
+      dob:       '.dob | strptime("%Y-%m-%d") | strftime("%d/%m/%Y")'
+      joined:    ".sign_up_ts | todate"
+      role:      ".role"
+      address:
+        handler: address
+        input: ".address"
+
+  address:
+    fields:
+      street:   '.line1 + (if .line2 != "" then ", " + .line2 else "" end)'
+      city:     ".city"
+      postcode: ".postcode"
+      country:  ".country_code"

@@ -1,0 +1,5 @@
+[
+  { "id": "engineering", "label": "Engineering",  "head_count_target": 20, "cost_centre": "CC-100" },
+  { "id": "design",      "label": "Design",        "head_count_target": 8,  "cost_centre": "CC-200" },
+  { "id": "marketing",   "label": "Marketing",     "head_count_target": 10, "cost_centre": "CC-300" }
+]

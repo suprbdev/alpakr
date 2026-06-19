@@ -1,0 +1,61 @@
+[
+  {
+    "order_ref": "ORD-2024-001",
+    "placed_at": "2024-09-01T14:32:00Z",
+    "customer": {
+      "id": "u-001",
+      "name": "Alice Thornton",
+      "email": "alice.thornton@example.com"
+    },
+    "status": "delivered",
+    "lines": [
+      { "sku": "PRD-001", "name": "Merino Wool Jumper", "qty": 1, "unit_price": 89.99 },
+      { "sku": "PRD-003", "name": "Canvas Tote Bag",    "qty": 2, "unit_price": 19.99 }
+    ],
+    "shipping": {
+      "method": "standard",
+      "address": "12 Baker Street, London, NW1 6XE"
+    },
+    "discount_pct": 10,
+    "notes": ""
+  },
+  {
+    "order_ref": "ORD-2024-002",
+    "placed_at": "2024-09-03T09:15:00Z",
+    "customer": {
+      "id": "u-002",
+      "name": "Ben Okafor",
+      "email": "ben.okafor@example.com"
+    },
+    "status": "cancelled",
+    "lines": [
+      { "sku": "PRD-002", "name": "Leather Wallet", "qty": 1, "unit_price": 34.99 }
+    ],
+    "shipping": {
+      "method": "express",
+      "address": "7 Grafton Street, Apt 3, Dublin, D02 X285"
+    },
+    "discount_pct": 0,
+    "notes": "Customer requested cancellation"
+  },
+  {
+    "order_ref": "ORD-2024-003",
+    "placed_at": "2024-10-12T18:44:00Z",
+    "customer": {
+      "id": "u-004",
+      "name": "Diana Ferreira",
+      "email": "diana.ferreira@example.com"
+    },
+    "status": "processing",
+    "lines": [
+      { "sku": "PRD-004", "name": "Running Shorts", "qty": 2, "unit_price": 44.99 },
+      { "sku": "PRD-001", "name": "Merino Wool Jumper", "qty": 1, "unit_price": 89.99 }
+    ],
+    "shipping": {
+      "method": "standard",
+      "address": "3 Rua Augusta, Lisbon, 1100-053"
+    },
+    "discount_pct": 0,
+    "notes": ""
+  }
+]

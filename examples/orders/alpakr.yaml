@@ -1,0 +1,53 @@
+# Demonstrates:
+#   - filter to exclude cancelled orders
+#   - computed subtotal from array of lines (reduce)
+#   - computed total after discount
+#   - line item count derived from array length
+#   - sub-handler for customer block
+#   - sub-handler for each line item (each: true inside sub-handler)
+#   - optional notes field with null coalescing
+#   - date reformatting from ISO 8601
+
+version: "1"
+
+source:
+  path: ./data/orders.json
+
+output:
+  format: json
+  indent: 2
+
+handlers:
+  root:
+    each: true
+    filter: '.status != "cancelled"'
+    fields:
+      ref:        ".order_ref"
+      placed:     '.placed_at | strptime("%Y-%m-%dT%H:%M:%SZ") | strftime("%d %b %Y %H:%M")'
+      status:     ".status"
+      item_count: ".lines | length"
+      subtotal:   "([.lines[] | .qty * .unit_price] | add) | round2"
+      total:      "(([.lines[] | .qty * .unit_price] | add) * (1 - (.discount_pct / 100))) | round2"
+      notes:      '.notes // ""'
+      customer:
+        handler: customer
+        input: ".customer"
+      lines:
+        handler: lines
+        input: "."
+
+  customer:
+    fields:
+      id:    ".id"
+      name:  ".name"
+      email: ".email"
+
+  lines:
+    input: ".lines"
+    each: true
+    fields:
+      sku:       ".sku"
+      name:      ".name"
+      qty:       ".qty"
+      unit:      ".unit_price"
+      line_total: ".qty * .unit_price | round2"

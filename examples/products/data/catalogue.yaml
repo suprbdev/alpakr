@@ -1,0 +1,47 @@
+catalogue:
+  updated: "2024-10-15"
+  currency: GBP
+  items:
+    - sku: PRD-001
+      title: "Merino Wool Jumper"
+      description: "  Soft, warm, sustainably sourced.  "
+      category: clothing
+      price_pence: 8999
+      stock: 42
+      tags: [wool, merino, sustainable, knitwear]
+      dimensions:
+        weight_g: 350
+        sizes: [XS, S, M, L, XL]
+
+    - sku: PRD-002
+      title: "Leather Wallet"
+      description: "Slim profile, RFID blocking."
+      category: accessories
+      price_pence: 3499
+      stock: 0
+      tags: [leather, rfid, slim]
+      dimensions:
+        weight_g: 85
+        sizes: []
+
+    - sku: PRD-003
+      title: "Canvas Tote Bag"
+      description: "  Organic cotton, natural dye.  "
+      category: accessories
+      price_pence: 1999
+      stock: 150
+      tags: [canvas, organic, tote]
+      dimensions:
+        weight_g: 220
+        sizes: []
+
+    - sku: PRD-004
+      title: "Running Shorts"
+      description: "Lightweight, moisture-wicking."
+      category: clothing
+      price_pence: 4499
+      stock: 88
+      tags: [running, sport, lightweight]
+      dimensions:
+        weight_g: 120
+        sizes: [XS, S, M, L, XL, XXL]

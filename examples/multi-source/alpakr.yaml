@@ -1,0 +1,63 @@
+# Demonstrates:
+#   - named sources map (three separate data files)
+#   - handlers each assigned to a different source via 'source:' key
+#   - no 'root' handler — must use --handler to select pipeline
+#   - run each independently:
+#       alpakr run -c alpakr.yaml --handler staff
+#       alpakr run -c alpakr.yaml --handler projects
+#       alpakr run -c alpakr.yaml --handler departments
+
+version: "1"
+
+sources:
+  staff:
+    path: ./data/staff.json
+  projects:
+    path: ./data/projects.yaml
+  departments:
+    path: ./data/departments.json
+
+output:
+  format: json
+  indent: 2
+
+handlers:
+  staff:
+    source: staff
+    each: true
+    filter: ".active"
+    fields:
+      id:         ".emp_id"
+      name:       '.given_name + " " + .family_name'
+      email:      ".email"
+      department: ".department"
+      grade:      ".grade"
+      started:    '.start_date | strptime("%Y-%m-%d") | strftime("%d %b %Y")'
+      salary_gbp: ".salary_gbp"
+
+  projects:
+    source: projects
+    input: ".projects"
+    each: true
+    filter: '.status == "active"'
+    fields:
+      id:           ".id"
+      name:         ".name"
+      department:   ".department"
+      lead:         ".lead_emp_id"
+      priority:     ".priority"
+      budget_gbp:   ".budget_gbp"
+      spent_gbp:    ".spent_gbp"
+      remaining_gbp: ".budget_gbp - .spent_gbp"
+      pct_spent:    "(.spent_gbp / .budget_gbp * 100) | round2"
+      start:        '.start_date | strptime("%Y-%m-%d") | strftime("%d %b %Y")'
+      due:          '.due_date | strptime("%Y-%m-%d") | strftime("%d %b %Y")'
+
+  departments:
+    source: departments
+    each: true
+    fields:
+      id:                ".id"
+      name:              ".label"
+      cost_centre:       ".cost_centre"
+      head_count_target: ".head_count_target"

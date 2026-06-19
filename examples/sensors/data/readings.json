@@ -1,0 +1,13 @@
+{
+  "station": "STATION-7",
+  "location": "Rooftop Lab B",
+  "readings": [
+    { "ts": "2024-11-01T06:00:00Z", "temp_c": 4.2,  "humidity_pct": 81, "wind_ms": 3.1,  "quality": "good" },
+    { "ts": "2024-11-01T07:00:00Z", "temp_c": 4.8,  "humidity_pct": 79, "wind_ms": 2.8,  "quality": "good" },
+    { "ts": "2024-11-01T08:00:00Z", "temp_c": 6.1,  "humidity_pct": 74, "wind_ms": 4.5,  "quality": "good" },
+    { "ts": "2024-11-01T09:00:00Z", "temp_c": 7.3,  "humidity_pct": 70, "wind_ms": 5.2,  "quality": "good" },
+    { "ts": "2024-11-01T10:00:00Z", "temp_c": -99,  "humidity_pct": 0,  "wind_ms": 0,    "quality": "error" },
+    { "ts": "2024-11-01T11:00:00Z", "temp_c": 9.4,  "humidity_pct": 65, "wind_ms": 6.1,  "quality": "good" },
+    { "ts": "2024-11-01T12:00:00Z", "temp_c": 10.1, "humidity_pct": 62, "wind_ms": 5.8,  "quality": "good" }
+  ]
+}

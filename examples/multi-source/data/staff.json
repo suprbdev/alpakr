@@ -1,0 +1,46 @@
+[
+  {
+    "emp_id": "E001",
+    "given_name": "Rosa",
+    "family_name": "Martínez",
+    "email": "rosa.martinez@company.com",
+    "department": "engineering",
+    "grade": "senior",
+    "start_date": "2019-03-11",
+    "active": true,
+    "salary_gbp": 72000
+  },
+  {
+    "emp_id": "E002",
+    "given_name": "James",
+    "family_name": "Osei",
+    "email": "james.osei@company.com",
+    "department": "design",
+    "grade": "mid",
+    "start_date": "2021-07-01",
+    "active": true,
+    "salary_gbp": 54000
+  },
+  {
+    "emp_id": "E003",
+    "given_name": "Priya",
+    "family_name": "Nair",
+    "email": "priya.nair@company.com",
+    "department": "engineering",
+    "grade": "lead",
+    "start_date": "2017-01-16",
+    "active": true,
+    "salary_gbp": 91000
+  },
+  {
+    "emp_id": "E004",
+    "given_name": "Tom",
+    "family_name": "Baxter",
+    "email": "tom.baxter@company.com",
+    "department": "marketing",
+    "grade": "junior",
+    "start_date": "2023-09-04",
+    "active": false,
+    "salary_gbp": 38000
+  }
+]

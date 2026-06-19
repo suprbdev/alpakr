@@ -1,0 +1,36 @@
+# Demonstrates:
+#   - YAML source file
+#   - input selector on nested collection (.catalogue.items)
+#   - filter to drop out-of-stock items
+#   - price conversion (pence -> pounds with round2)
+#   - string trim via ltrimstr/rtrimstr
+#   - slug generation from title
+#   - in_stock boolean derived from .stock count
+#   - array field (sizes) passed through directly
+#   - YAML output format
+
+version: "1"
+
+source:
+  path: ./data/catalogue.yaml
+
+output:
+  format: yaml
+
+handlers:
+  root:
+    input: ".catalogue.items"
+    each: true
+    filter: ".stock > 0"
+    fields:
+      sku:         ".sku"
+      title:       ".title"
+      slug:        ".title | slugify"
+      description: '.description | gsub("^\\s+|\\s+$"; "")'
+      category:    ".category"
+      price_gbp:   ".price_pence / 100 | round2"
+      in_stock:    ".stock > 0"
+      stock:       ".stock"
+      tags:        ".tags"
+      sizes:       ".dimensions.sizes"
+      weight_g:    ".dimensions.weight_g"

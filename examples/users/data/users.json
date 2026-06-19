@@ -1,0 +1,76 @@
+{
+  "meta": {
+    "total": 4,
+    "exported_at": "2024-11-01T09:00:00Z"
+  },
+  "users": [
+    {
+      "user_id": "u-001",
+      "first_name": "Alice",
+      "last_name": "Thornton",
+      "email_address": "alice.thornton@example.com",
+      "dob": "1990-06-15",
+      "status": "active",
+      "role": "admin",
+      "sign_up_ts": 1609459200,
+      "address": {
+        "line1": "12 Baker Street",
+        "line2": "",
+        "city": "London",
+        "postcode": "NW1 6XE",
+        "country_code": "GB"
+      }
+    },
+    {
+      "user_id": "u-002",
+      "first_name": "Ben",
+      "last_name": "Okafor",
+      "email_address": "ben.okafor@example.com",
+      "dob": "1985-03-22",
+      "status": "active",
+      "role": "member",
+      "sign_up_ts": 1625000000,
+      "address": {
+        "line1": "7 Grafton Street",
+        "line2": "Apt 3",
+        "city": "Dublin",
+        "postcode": "D02 X285",
+        "country_code": "IE"
+      }
+    },
+    {
+      "user_id": "u-003",
+      "first_name": "Chen",
+      "last_name": "Wei",
+      "email_address": "chen.wei@example.com",
+      "dob": "1995-11-08",
+      "status": "suspended",
+      "role": "member",
+      "sign_up_ts": 1640000000,
+      "address": {
+        "line1": "99 Princes Street",
+        "line2": "",
+        "city": "Edinburgh",
+        "postcode": "EH2 2ER",
+        "country_code": "GB"
+      }
+    },
+    {
+      "user_id": "u-004",
+      "first_name": "Diana",
+      "last_name": "Ferreira",
+      "email_address": "diana.ferreira@example.com",
+      "dob": "2000-01-30",
+      "status": "active",
+      "role": "member",
+      "sign_up_ts": 1700000000,
+      "address": {
+        "line1": "3 Rua Augusta",
+        "line2": "",
+        "city": "Lisbon",
+        "postcode": "1100-053",
+        "country_code": "PT"
+      }
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+# Demonstrates:
+#   - filter to drop error/bad quality readings
+#   - unit conversion (Celsius -> Fahrenheit, m/s -> km/h)
+#   - timestamp reformatting
+#   - single object source (not a collection at top level)
+#   - metadata fields alongside the collection via two handlers
+#   - non-root entry handler (run with --handler reading to get just readings)
+
+version: "1"
+
+source:
+  path: ./data/readings.json
+
+output:
+  format: json
+  indent: 2
+
+handlers:
+  root:
+    fields:
+      station:  ".station"
+      location: ".location"
+      readings:
+        handler: reading
+        input: ".readings"
+
+  reading:
+    each: true
+    filter: '.quality == "good"'
+    fields:
+      timestamp:    '.ts | strptime("%Y-%m-%dT%H:%M:%SZ") | strftime("%Y-%m-%d %H:%M")'
+      temp_c:       ".temp_c"
+      temp_f:       ".temp_c * 9 / 5 + 32 | round2"
+      humidity_pct: ".humidity_pct"
+      wind_ms:      ".wind_ms"
+      wind_kmh:     ".wind_ms * 3.6 | round2"

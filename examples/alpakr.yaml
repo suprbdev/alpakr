@@ -1,0 +1,327 @@
+# =============================================================================
+# alpakr — comprehensive reference config
+# Every option is shown and explained. This file is not intended to run as-is;
+# it is a complete reference for all supported configuration.
+# =============================================================================
+
+# version: config schema version. Currently only "1" is valid.
+version: "1"
+
+
+# =============================================================================
+# source (single-source configs)
+# =============================================================================
+# The default source used by any handler that does not specify a 'source:' key.
+# Use this for single-source configs. For multi-source configs, use 'sources:'
+# below instead.
+#
+# Rules:
+#   - 'path' and 'url' are mutually exclusive — specify exactly one
+#   - 'format' is optional — auto-detected from the file extension or URL path:
+#       .json         → json
+#       .yaml / .yml  → yaml
+#     If the extension is absent or unrecognised, defaults to json
+source:
+  # path: local file path, relative to this config file's directory
+  path: ./data/records.json
+
+  # url: fetch data from a URL via HTTP GET (mutually exclusive with path)
+  # url: https://example.com/api/records.json
+
+  # format: explicitly set the input format — json | yaml
+  # Optional. Auto-detected from extension if omitted.
+  # format: json
+
+
+# =============================================================================
+# sources (multi-source configs)
+# =============================================================================
+# Named source definitions. Each handler can reference one by name via its
+# 'source:' key. Allows multiple independent data files or URLs in one config.
+#
+# If 'sources' is used, a top-level 'source' is not required, but both can
+# coexist — handlers without a 'source:' key fall back to the top-level source.
+#
+# sources:
+#   staff:
+#     path: ./data/staff.json
+#
+#   projects:
+#     path: ./data/projects.yaml    # yaml auto-detected from extension
+#
+#   remote:
+#     url: https://example.com/api/data.json
+#     format: json                  # explicit — useful when URL has no extension
+
+
+# =============================================================================
+# output
+# =============================================================================
+output:
+  # format: output encoding — json | yaml
+  # Default: json
+  format: json
+
+  # indent: number of spaces for JSON pretty-printing
+  # Default: 2. Has no effect on yaml output.
+  indent: 2
+
+  # file: write output to a file instead of stdout
+  # Path is relative to this config file's directory.
+  # Parent directories are created automatically if they do not exist.
+  # Default: stdout (omit this key)
+  # file: ./out/result.json
+
+
+# =============================================================================
+# handlers
+# =============================================================================
+# Named processing units. Each handler receives data, maps and transforms
+# fields, and returns a new object (or array of objects).
+#
+# Handlers can reference other handlers for nested/relational data, enabling
+# recursive composition without duplicating field mappings.
+#
+# Run a handler: alpakr run --handler <name>
+# Default:       if a handler named 'root' exists, it is used automatically.
+#                Otherwise --handler is required.
+handlers:
+
+  # ---------------------------------------------------------------------------
+  # root
+  # The default entry-point handler. Used automatically when --handler is not
+  # specified. The name 'root' has no special behaviour beyond this convention.
+  # ---------------------------------------------------------------------------
+  root:
+
+    # source: name of a key in the top-level 'sources' map.
+    # Tells this handler which data source to load.
+    # Omit to use the top-level 'source' definition.
+    # source: staff
+
+    # input: jq expression applied to the raw source data before any field
+    # mapping. Use this to drill into a wrapper object and extract the value
+    # you actually want to process.
+    #
+    # Examples:
+    #   ".data"              — extract the 'data' key
+    #   ".response.records"  — nested key path
+    #   "."                  — identity (default, same as omitting this key)
+    #
+    # Default: "." (the full source value is passed to the handler unchanged)
+    input: ".records"
+
+    # each: when true, the input is treated as an array and the handler is
+    # applied to each element individually. Results are collected into an
+    # output array.
+    #
+    # When false (default), the input is treated as a single object and the
+    # handler produces a single output object.
+    #
+    # Error: if each is true but the input is not an array, alpakr exits with
+    # an error identifying the handler.
+    each: true
+
+    # filter: jq predicate expression. Evaluated against each record before
+    # field mapping. Records where the expression returns false or null are
+    # dropped from the output entirely.
+    #
+    # Has no effect when each: false.
+    #
+    # Examples:
+    #   ".active == true"        — boolean field check
+    #   '.status != "archived"'  — string comparison
+    #   ".score > 0"             — numeric comparison
+    #   ".price > 0 and .stock > 0"  — compound condition
+    filter: ".active == true"
+
+    # fields: map of output field name → value definition.
+    # Each key becomes a field in the output object.
+    # Values are either a jq expression string or a sub-handler reference.
+    # Fields are not ordered — output object key order is not guaranteed.
+    fields:
+
+      # -----------------------------------------------------------------------
+      # Field type 1: jq expression string
+      # -----------------------------------------------------------------------
+      # The value is any valid jq expression evaluated against the current
+      # record. The result becomes the field value in the output.
+      #
+      # All standard jq functions are available:
+      #   https://jqlang.github.io/jq/manual/
+      #
+      # Plus alpakr built-ins: round2, slugify, to_int, to_float (see below).
+
+      # Simple field pass-through
+      id: ".id"
+
+      # Field rename (source field 'user_id' → output field 'id')
+      # id: ".user_id"
+
+      # String transforms
+      title:    ".name | ascii_downcase"
+      code:     ".country_code | ascii_upcase"
+      slug:     ".name | slugify"
+
+      # String trim — strip leading and trailing whitespace
+      description: '.raw_description | gsub("^\\s+|\\s+$"; "")'
+
+      # String replace
+      cleaned: '.text | gsub("foo"; "bar")'
+
+      # String concatenation
+      full_name: '.first_name + " " + .last_name'
+
+      # Conditional / ternary
+      status_label: 'if .status == "active" then "Active" else "Inactive" end'
+
+      # Null coalescing — use a default when the source field is null or absent
+      label: '.nickname // .first_name // "unknown"'
+
+      # Numeric math
+      distance_km: ".distance_miles * 1.60934 | round2"
+      remaining:   ".budget - .spent"
+      pct_used:    "(.spent / .budget * 100) | round2"
+
+      # Type conversion
+      count_int:   ".count | to_int"
+      score_float: ".score | to_float"
+
+      # Date reformatting — strptime parses, strftime formats
+      date_formatted: '.date | strptime("%Y-%m-%d") | strftime("%d/%m/%Y")'
+
+      # Unix timestamp → ISO 8601
+      created_iso: ".created_at | todate"
+
+      # Array — collect and transform elements
+      tags: "[.tags[] | ascii_upcase]"
+
+      # Array length
+      item_count: ".lines | length"
+
+      # Aggregate — sum an array of computed values
+      subtotal: "([.lines[] | .qty * .unit_price] | add) | round2"
+
+      # -----------------------------------------------------------------------
+      # Field type 2: sub-handler reference
+      # -----------------------------------------------------------------------
+      # Delegates this field's value to another handler. The referenced handler
+      # is run against a sub-selection of the current record, and its output
+      # becomes the field value.
+      #
+      # This enables nested/relational data to be modelled without duplicating
+      # field mappings. Handlers can be composed to any depth.
+      #
+      # Keys:
+      #   handler: (required) name of the handler to delegate to
+      #   input:   (optional) jq expression to extract the sub-value passed to
+      #            the handler. Defaults to "." (the full current record).
+
+      # Delegate to 'address' handler, passing .address as its input
+      address:
+        handler: address
+        input: ".address"
+
+      # Delegate to 'category' handler using the full current record as input
+      category:
+        handler: category
+        input: "."
+
+      # Sub-handler with each: true — delegate an array field to a handler
+      # that iterates it. The handler must have each: true.
+      line_items:
+        handler: line_item
+        input: ".lines"
+
+
+  # ---------------------------------------------------------------------------
+  # address
+  # Example sub-handler. Receives an address object, outputs a flat structure.
+  # ---------------------------------------------------------------------------
+  address:
+    # No 'source' — sub-handlers receive their data from the parent handler's
+    # field delegation, not from a source file. The 'source' key is only
+    # meaningful on top-level entry-point handlers.
+    fields:
+      street:   '.line1 + (if .line2 != "" then ", " + .line2 else "" end)'
+      city:     ".city"
+      postcode: ".postcode"
+      country:  ".country_code | ascii_upcase"
+
+
+  # ---------------------------------------------------------------------------
+  # category
+  # Example sub-handler receiving the full parent record as input (input: ".")
+  # ---------------------------------------------------------------------------
+  category:
+    fields:
+      id:   ".category_id"
+      name: ".category_name | ascii_downcase"
+      slug: ".category_name | slugify"
+
+
+  # ---------------------------------------------------------------------------
+  # line_item
+  # Example sub-handler with each: true — receives an array from the parent
+  # and iterates it, returning an array of mapped objects.
+  # ---------------------------------------------------------------------------
+  line_item:
+    each: true
+    fields:
+      sku:        ".sku"
+      name:       ".name"
+      qty:        ".qty"
+      unit_price: ".unit_price"
+      line_total: ".qty * .unit_price | round2"
+
+
+# =============================================================================
+# built-in alpakr jq functions
+# =============================================================================
+# These are registered as native jq functions and can be used anywhere a jq
+# expression is accepted (fields, input, filter).
+#
+# round2
+#   Rounds a number to 2 decimal places.
+#   Input:  float or int
+#   Output: float
+#   Usage:  .price | round2
+#           .miles * 1.60934 | round2
+#
+# slugify
+#   Lowercases a string, replaces spaces with dashes, strips non-alphanumeric
+#   characters, and collapses multiple consecutive dashes.
+#   Input:  string
+#   Output: string
+#   Usage:  .name | slugify
+#           "Hello World!" | slugify   →  "hello-world"
+#
+# to_int
+#   Converts a float or numeric string to an integer (truncates, does not round).
+#   Input:  float | int | string
+#   Output: int
+#   Usage:  .score | to_int
+#           "42" | to_int   →  42
+#
+# to_float
+#   Converts an integer or numeric string to a float.
+#   Input:  int | float | string
+#   Output: float
+#   Usage:  .count | to_float
+#           "3.14" | to_float   →  3.14
+#
+# All standard jq built-ins are also available, including:
+#   ascii_upcase / ascii_downcase
+#   gsub(re; replacement)
+#   ltrimstr(s) / rtrimstr(s)
+#   split(s) / join(s)
+#   tonumber / tostring
+#   todate / fromdate / strptime / strftime / now
+#   length / keys / values / has(key)
+#   select(cond) / empty
+#   if COND then A else B end
+#   .a // .b   (null coalescing / alternative operator)
+#   add / any / all / unique / sort / reverse / flatten / group_by / sort_by
+#   map(expr) / map_values(expr)
+#   [.items[] | expr]  (array construction)
+#   ([.lines[] | .qty * .price] | add)  (aggregate)

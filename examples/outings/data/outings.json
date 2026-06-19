@@ -1,0 +1,50 @@
+[
+  {
+    "id": 1,
+    "name": "Peak District Walk",
+    "date": "2024-03-15",
+    "distance_miles": 8.5,
+    "tags": ["hiking", "hills", "scenic"],
+    "location": {
+      "county": "Derbyshire",
+      "country": "England",
+      "country_code": "gb"
+    }
+  },
+  {
+    "id": 2,
+    "name": "Snowdonia Loop",
+    "date": "2024-05-22",
+    "distance_miles": 12.3,
+    "tags": ["mountains", "challenging"],
+    "location": {
+      "county": "Gwynedd",
+      "country": "Wales",
+      "country_code": "gb"
+    }
+  },
+  {
+    "id": 3,
+    "name": "Zero Distance Test",
+    "date": "2024-06-01",
+    "distance_miles": 0,
+    "tags": [],
+    "location": {
+      "county": "Unknown",
+      "country": "Unknown",
+      "country_code": "xx"
+    }
+  },
+  {
+    "id": 4,
+    "name": "Lake District Ramble",
+    "date": "2024-07-04",
+    "distance_miles": 6.1,
+    "tags": ["lakes", "family"],
+    "location": {
+      "county": "Cumbria",
+      "country": "England",
+      "country_code": "gb"
+    }
+  }
+]
