@@ -109,7 +109,7 @@ func buildWriter(cfg *config.Config) (writer, error) {
 
 func buildSource(s config.SourceConfig) (source.Source, error) {
 	if s.URL != "" {
-		return &source.URLSource{URL: s.URL, Format: s.Format}, nil
+		return &source.URLSource{URL: s.URL, Format: s.Format, Method: s.Method, Headers: s.Headers, Body: s.Body}, nil
 	}
 	return &source.FileSource{Path: s.Path, Format: s.Format}, nil
 }

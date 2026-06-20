@@ -39,6 +39,11 @@ source:
   path: ./data/records.json   # local file — mutually exclusive with url:
   # url: https://example.com/data.json
   # format: json              # json | yaml — auto-detected from extension
+  # method: POST              # HTTP method (default: GET). POST/PUT/PATCH required when body is set.
+  # headers:
+  #   Authorization: "Bearer <token>"
+  #   Accept: "application/json"
+  # body: '{"filter":"active"}'  # request body — requires method POST, PUT, or PATCH
 
 output:
   format: json                # json | yaml (default: json)
@@ -79,6 +84,8 @@ sources:
     path: ./data/projects.yaml   # format auto-detected from extension
   inventory:
     url: https://example.com/inventory.json
+    headers:
+      Authorization: "Bearer <token>"
 
 output:
   format: json

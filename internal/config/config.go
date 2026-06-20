@@ -11,9 +11,12 @@ type Config struct {
 }
 
 type SourceConfig struct {
-	Path   string `yaml:"path"`
-	URL    string `yaml:"url"`
-	Format string `yaml:"format"`
+	Path    string            `yaml:"path"`
+	URL     string            `yaml:"url"`
+	Format  string            `yaml:"format"`
+	Method  string            `yaml:"method"`
+	Headers map[string]string `yaml:"headers"`
+	Body    string            `yaml:"body"`
 }
 
 type OutputConfig struct {

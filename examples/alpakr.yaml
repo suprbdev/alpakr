@@ -25,12 +25,27 @@ source:
   # path: local file path, relative to this config file's directory
   path: ./data/records.json
 
-  # url: fetch data from a URL via HTTP GET (mutually exclusive with path)
+  # url: fetch data from a URL (mutually exclusive with path)
   # url: https://example.com/api/records.json
 
   # format: explicitly set the input format — json | yaml
   # Optional. Auto-detected from extension if omitted.
   # format: json
+
+  # method: HTTP method for URL sources — GET | POST | PUT | PATCH | DELETE etc.
+  # Default: GET. Case-insensitive; stored as uppercase.
+  # method: GET
+
+  # headers: map of HTTP request headers to send with the URL request.
+  # Only valid with 'url'. Each key is a header name, each value is a string.
+  # headers:
+  #   Authorization: "Bearer <token>"
+  #   Accept: "application/json"
+  #   X-Api-Key: "abc123"
+
+  # body: request body sent with POST/PUT/PATCH requests.
+  # Only valid with 'url'. Requires method to be POST, PUT, or PATCH.
+  # body: '{"filter": "active", "limit": 100}'
 
 
 # =============================================================================
@@ -52,6 +67,19 @@ source:
 #   remote:
 #     url: https://example.com/api/data.json
 #     format: json                  # explicit — useful when URL has no extension
+#
+#   authenticated:
+#     url: https://example.com/api/private.json
+#     headers:
+#       Authorization: "Bearer <token>"
+#       Accept: "application/json"
+#
+#   search:
+#     url: https://example.com/api/search
+#     method: POST
+#     headers:
+#       Content-Type: "application/json"
+#     body: '{"q": "active", "limit": 100}'
 
 
 # =============================================================================

@@ -37,12 +37,18 @@ func validate(cfg *Config, configPath string) error {
 	if cfg.Source.Path != "" && cfg.Source.URL != "" {
 		return fmt.Errorf("config: source cannot have both 'path' and 'url'")
 	}
+	if err := validateURLOptions("source", cfg.Source); err != nil {
+		return err
+	}
 	for name, s := range cfg.Sources {
 		if s.Path != "" && s.URL != "" {
 			return fmt.Errorf("config: sources.%s cannot have both 'path' and 'url'", name)
 		}
 		if s.Path == "" && s.URL == "" {
 			return fmt.Errorf("config: sources.%s must have 'path' or 'url'", name)
+		}
+		if err := validateURLOptions("sources."+name, s); err != nil {
+			return err
 		}
 	}
 	if len(cfg.Handlers) == 0 {
@@ -84,6 +90,27 @@ func validate(cfg *Config, configPath string) error {
 	return nil
 }
 
+func validateURLOptions(label string, s SourceConfig) error {
+	if s.URL == "" {
+		if len(s.Headers) > 0 {
+			return fmt.Errorf("config: %s: 'headers' requires 'url'", label)
+		}
+		if s.Method != "" {
+			return fmt.Errorf("config: %s: 'method' requires 'url'", label)
+		}
+		if s.Body != "" {
+			return fmt.Errorf("config: %s: 'body' requires 'url'", label)
+		}
+	}
+	if s.Body != "" {
+		m := strings.ToUpper(s.Method)
+		if m != "POST" && m != "PUT" && m != "PATCH" {
+			return fmt.Errorf("config: %s: 'body' requires method POST, PUT, or PATCH (got %q)", label, s.Method)
+		}
+	}
+	return nil
+}
+
 func applyDefaults(cfg *Config, _ string) {
 	if cfg.Output.Format == "" {
 		cfg.Output.Format = "json"
@@ -92,10 +119,17 @@ func applyDefaults(cfg *Config, _ string) {
 		cfg.Output.Indent = 2
 	}
 
-	detectFormat(&cfg.Source)
+	normaliseSource(&cfg.Source)
 	for name, s := range cfg.Sources {
-		detectFormat(&s)
+		normaliseSource(&s)
 		cfg.Sources[name] = s
+	}
+}
+
+func normaliseSource(s *SourceConfig) {
+	detectFormat(s)
+	if s.Method != "" {
+		s.Method = strings.ToUpper(s.Method)
 	}
 }
 

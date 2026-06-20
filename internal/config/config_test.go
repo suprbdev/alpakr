@@ -134,6 +134,96 @@ handlers:
 	}
 }
 
+func TestURLOptions_HeadersRequireURL(t *testing.T) {
+	_, err := loadString(t, `
+version: "1"
+source:
+  path: /tmp/x.json
+  headers:
+    Authorization: "Bearer tok"
+handlers:
+  root:
+    fields:
+      id: ".id"
+`)
+	if err == nil {
+		t.Fatal("expected error: headers on path source")
+	}
+}
+
+func TestURLOptions_MethodRequiresURL(t *testing.T) {
+	_, err := loadString(t, `
+version: "1"
+source:
+  path: /tmp/x.json
+  method: POST
+handlers:
+  root:
+    fields:
+      id: ".id"
+`)
+	if err == nil {
+		t.Fatal("expected error: method on path source")
+	}
+}
+
+func TestURLOptions_BodyRequiresPostMethod(t *testing.T) {
+	_, err := loadString(t, `
+version: "1"
+source:
+  url: http://example.com/data.json
+  body: '{"q":"test"}'
+handlers:
+  root:
+    fields:
+      id: ".id"
+`)
+	if err == nil {
+		t.Fatal("expected error: body without POST/PUT/PATCH method")
+	}
+}
+
+func TestURLOptions_BodyWithPOST(t *testing.T) {
+	cfg := mustLoad(t, `
+version: "1"
+source:
+  url: http://example.com/data.json
+  method: post
+  body: '{"q":"test"}'
+handlers:
+  root:
+    fields:
+      id: ".id"
+`)
+	if cfg.Source.Method != "POST" {
+		t.Errorf("method = %q, want POST (uppercased)", cfg.Source.Method)
+	}
+	if cfg.Source.Body != `{"q":"test"}` {
+		t.Errorf("body = %q, want {\"q\":\"test\"}", cfg.Source.Body)
+	}
+}
+
+func TestURLOptions_HeadersParsed(t *testing.T) {
+	cfg := mustLoad(t, `
+version: "1"
+source:
+  url: http://example.com/data.json
+  headers:
+    Authorization: "Bearer tok"
+    Accept: "application/json"
+handlers:
+  root:
+    fields:
+      id: ".id"
+`)
+	if cfg.Source.Headers["Authorization"] != "Bearer tok" {
+		t.Errorf("Authorization header = %q", cfg.Source.Headers["Authorization"])
+	}
+	if cfg.Source.Headers["Accept"] != "application/json" {
+		t.Errorf("Accept header = %q", cfg.Source.Headers["Accept"])
+	}
+}
+
 // mustLoad parses YAML config string; fails test on error.
 func mustLoad(t *testing.T, content string) *Config {
 	t.Helper()
