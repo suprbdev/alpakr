@@ -54,10 +54,15 @@ func runRun(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("handler %q not found in config; available: %s", handlerName, handlerNames(cfg))
 	}
 
-	// Load source for the selected handler
-	src, err := buildSource(cfg.SourceFor(handlerName))
-	if err != nil {
-		return err
+	// Load source for the selected handler; stdin pipe takes priority
+	var src source.Source
+	if stdinIsPipe() {
+		src = &source.StdinSource{Format: cfg.SourceFor(handlerName).Format}
+	} else {
+		src, err = buildSource(cfg.SourceFor(handlerName))
+		if err != nil {
+			return err
+		}
 	}
 	data, err := src.Load()
 	if err != nil {
@@ -105,6 +110,14 @@ func buildWriter(cfg *config.Config) (writer, error) {
 	default:
 		return &output.JSONWriter{Indent: cfg.Output.Indent, Out: out}, nil
 	}
+}
+
+func stdinIsPipe() bool {
+	fi, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return (fi.Mode() & os.ModeCharDevice) == 0
 }
 
 func buildSource(s config.SourceConfig) (source.Source, error) {

@@ -1,6 +1,6 @@
 # alpakr
 
-YAML-configured data transformation tool. Reads JSON or YAML from a file or URL, applies a pipeline of named handlers to restructure and transform the data, and outputs JSON or YAML to stdout or a file.
+YAML-configured data transformation tool. Reads JSON or YAML from a file, URL, or stdin pipe, applies a pipeline of named handlers to restructure and transform the data, and outputs JSON or YAML to stdout or a file.
 
 Useful for: migrating between schemas, importing externally sourced data, normalising nested/relational data.
 
@@ -25,7 +25,8 @@ alpakr run -o out.json                 # write to file instead of stdout
 alpakr validate                        # check config + compile all expressions
 alpakr list-handlers                   # print handler names defined in config
 
-alpakr run | jq .                      # pipe to other tools
+alpakr run | jq .                      # pipe output to other tools
+cat data.json | alpakr run             # pipe data in — stdin detected automatically, source config ignored
 ```
 
 ## Config
@@ -38,7 +39,7 @@ version: "1"
 source:
   path: ./data/records.json   # local file — mutually exclusive with url:
   # url: https://example.com/data.json
-  # format: json              # json | yaml — auto-detected from extension
+  # format: json              # json | yaml — auto-detected from extension; stdin defaults to json
   # method: POST              # HTTP method (default: GET). POST/PUT/PATCH required when body is set.
   # headers:
   #   Authorization: "Bearer <token>"

@@ -34,20 +34,14 @@ func validate(cfg *Config, configPath string) error {
 	if !hasDefaultSource && len(cfg.Sources) == 0 {
 		return fmt.Errorf("config: must have 'source' or at least one entry in 'sources'")
 	}
-	if cfg.Source.Path != "" && cfg.Source.URL != "" {
-		return fmt.Errorf("config: source cannot have both 'path' and 'url'")
-	}
-	if err := validateURLOptions("source", cfg.Source); err != nil {
+	if err := validateSourceConfig("source", cfg.Source); err != nil {
 		return err
 	}
 	for name, s := range cfg.Sources {
-		if s.Path != "" && s.URL != "" {
-			return fmt.Errorf("config: sources.%s cannot have both 'path' and 'url'", name)
-		}
 		if s.Path == "" && s.URL == "" {
 			return fmt.Errorf("config: sources.%s must have 'path' or 'url'", name)
 		}
-		if err := validateURLOptions("sources."+name, s); err != nil {
+		if err := validateSourceConfig("sources."+name, s); err != nil {
 			return err
 		}
 	}
@@ -90,7 +84,10 @@ func validate(cfg *Config, configPath string) error {
 	return nil
 }
 
-func validateURLOptions(label string, s SourceConfig) error {
+func validateSourceConfig(label string, s SourceConfig) error {
+	if s.Path != "" && s.URL != "" {
+		return fmt.Errorf("config: %s cannot have both 'path' and 'url'", label)
+	}
 	if s.URL == "" {
 		if len(s.Headers) > 0 {
 			return fmt.Errorf("config: %s: 'headers' requires 'url'", label)
@@ -141,6 +138,7 @@ func detectFormat(s *SourceConfig) {
 	if src == "" {
 		src = s.URL
 	}
+	// stdin and URLs without extension default to JSON
 	switch strings.ToLower(filepath.Ext(src)) {
 	case ".yaml", ".yml":
 		s.Format = "yaml"

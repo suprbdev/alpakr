@@ -21,6 +21,10 @@ version: "1"
 #       .json         → json
 #       .yaml / .yml  → yaml
 #     If the extension is absent or unrecognised, defaults to json
+#
+# Stdin piping: if data is piped to alpakr via stdin, the source config is
+# bypassed automatically. The 'format' here is still used to parse stdin data.
+# Usage: cat data.json | alpakr run -c config.yaml
 source:
   # path: local file path, relative to this config file's directory
   path: ./data/records.json
@@ -29,7 +33,7 @@ source:
   # url: https://example.com/api/records.json
 
   # format: explicitly set the input format — json | yaml
-  # Optional. Auto-detected from extension if omitted.
+  # Optional. Auto-detected from extension if omitted. Stdin defaults to json.
   # format: json
 
   # method: HTTP method for URL sources — GET | POST | PUT | PATCH | DELETE etc.
