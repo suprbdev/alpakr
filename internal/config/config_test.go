@@ -250,3 +250,98 @@ func loadString(t *testing.T, content string) (*Config, error) {
 	// Make source path absolute so validate doesn't fail on relative resolution
 	return Load(filepath.Clean(f.Name()))
 }
+
+func TestFieldConfigUnmarshalYAML_InlineFields(t *testing.T) {
+	cfg := mustLoad(t, `
+version: "1"
+source:
+  path: /tmp/x.json
+handlers:
+  root:
+    fields:
+      location:
+        input: ".loc"
+        fields:
+          city: ".city"
+          country: ".country"
+`)
+	f := cfg.Handlers["root"].Fields["location"]
+	if f.Fields == nil {
+		t.Fatal("Fields should be set for inline object")
+	}
+	if f.Input != ".loc" {
+		t.Errorf("Input = %q, want .loc", f.Input)
+	}
+	if f.Fields["city"].Expr != ".city" {
+		t.Errorf("city expr = %q, want .city", f.Fields["city"].Expr)
+	}
+	if f.Handler != "" || f.Expr != "" {
+		t.Errorf("Handler and Expr should be empty for inline object")
+	}
+}
+
+func TestFieldConfigUnmarshalYAML_InlineFields_NoInput(t *testing.T) {
+	cfg := mustLoad(t, `
+version: "1"
+source:
+  path: /tmp/x.json
+handlers:
+  root:
+    fields:
+      meta:
+        fields:
+          id: ".id"
+          slug: ".name | slugify"
+`)
+	f := cfg.Handlers["root"].Fields["meta"]
+	if f.Fields == nil {
+		t.Fatal("Fields should be set")
+	}
+	if f.Input != "" {
+		t.Errorf("Input should be empty, got %q", f.Input)
+	}
+	if len(f.Fields) != 2 {
+		t.Errorf("nested field count = %d, want 2", len(f.Fields))
+	}
+}
+
+func TestFieldConfigUnmarshalYAML_InlineFields_HandlerAndFieldsError(t *testing.T) {
+	_, err := loadString(t, `
+version: "1"
+source:
+  path: /tmp/x.json
+handlers:
+  root:
+    fields:
+      bad:
+        handler: other
+        fields:
+          x: ".x"
+  other:
+    fields:
+      x: ".x"
+`)
+	if err == nil {
+		t.Fatal("expected error for field with both handler and fields keys")
+	}
+}
+
+func TestFieldConfigUnmarshalYAML_BareMapError(t *testing.T) {
+	// A map with neither 'handler' nor 'fields' key should error — previously
+	// this was silently treated as inline fields, creating ambiguity with data
+	// that has keys named 'handler' or 'input'.
+	_, err := loadString(t, `
+version: "1"
+source:
+  path: /tmp/x.json
+handlers:
+  root:
+    fields:
+      location:
+        city: ".city"
+        country: ".country"
+`)
+	if err == nil {
+		t.Fatal("expected error for bare map without handler or fields key")
+	}
+}

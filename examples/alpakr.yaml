@@ -254,14 +254,57 @@ handlers:
       subtotal: "([.lines[] | .qty * .unit_price] | add) | round2"
 
       # -----------------------------------------------------------------------
-      # Field type 2: sub-handler reference
+      # Field type 2: inline nested object
+      # -----------------------------------------------------------------------
+      # Produces a nested output object in-place. No separate handler needed.
+      # Use this when the nested structure is only needed once and doesn't
+      # warrant a reusable handler.
+      #
+      # The 'fields' key is required and marks this as an inline object —
+      # this avoids ambiguity with source data that has keys named 'handler'
+      # or 'input'.
+      #
+      # Keys:
+      #   fields: (required) map of field definitions — same rules as top-level
+      #           fields; values can be jq strings, more inline objects, or
+      #           sub-handler references.
+      #   input:  (optional) jq expression to narrow the data before evaluating
+      #           the nested fields. Defaults to "." (full current record).
+      #
+      # Nesting is arbitrary — inline objects can contain inline objects.
+
+      # Inline nested object with input narrowing
+      geo:
+        input: ".coordinates"
+        fields:
+          lat: ".lat"
+          lng: ".lng"
+
+      # Inline nested object without input narrowing — fields evaluate against
+      # the same data as the parent record
+      meta:
+        fields:
+          created: ".created_at | todate"
+          slug:    ".title | slugify"
+
+      # Deep nesting — inline objects inside inline objects
+      # region:
+      #   fields:
+      #     country:
+      #       fields:
+      #         name: ".country"
+      #         code: ".country_code | ascii_upcase"
+      #     city: ".city"
+
+      # -----------------------------------------------------------------------
+      # Field type 3: sub-handler reference
       # -----------------------------------------------------------------------
       # Delegates this field's value to another handler. The referenced handler
       # is run against a sub-selection of the current record, and its output
       # becomes the field value.
       #
-      # This enables nested/relational data to be modelled without duplicating
-      # field mappings. Handlers can be composed to any depth.
+      # Use sub-handlers when the nested structure is shared across multiple
+      # handlers and you want a single definition to avoid duplication.
       #
       # Keys:
       #   handler: (required) name of the handler to delegate to

@@ -33,11 +33,12 @@ type HandlerConfig struct {
 	Fields map[string]FieldConfig `yaml:"fields"`
 }
 
-// FieldConfig is a union: either a jq expression string, or a sub-handler reference.
+// FieldConfig is a union: a jq expression string, a sub-handler reference, or an inline nested object.
 type FieldConfig struct {
 	Expr    string
 	Handler string
 	Input   string
+	Fields  map[string]FieldConfig // inline nested object
 }
 
 func (f *FieldConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
@@ -48,17 +49,52 @@ func (f *FieldConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		return nil
 	}
 
-	// Try mapping with handler/input keys
-	var m map[string]string
-	if err := unmarshal(&m); err != nil {
-		return fmt.Errorf("field must be a jq expression string or {handler, input} mapping")
+	// Decode as raw map to inspect dispatch keys
+	var raw map[string]interface{}
+	if err := unmarshal(&raw); err != nil {
+		return fmt.Errorf("field must be a jq expression string, {handler, input} mapping, or {input, fields} inline object")
 	}
 
-	handler, ok := m["handler"]
-	if !ok || handler == "" {
-		return fmt.Errorf("field mapping must have a non-empty 'handler' key")
+	_, hasHandler := raw["handler"]
+	_, hasFields := raw["fields"]
+
+	if hasHandler && hasFields {
+		return fmt.Errorf("field cannot have both 'handler' and 'fields' keys")
 	}
-	f.Handler = handler
-	f.Input = m["input"]
-	return nil
+
+	// Sub-handler reference: keyed by 'handler'
+	if hasHandler {
+		h, ok := raw["handler"].(string)
+		if !ok || h == "" {
+			return fmt.Errorf("field 'handler' must be a non-empty string")
+		}
+		f.Handler = h
+		if inp, ok := raw["input"].(string); ok {
+			f.Input = inp
+		}
+		return nil
+	}
+
+	// Inline nested object: keyed by 'fields'
+	if hasFields {
+		if inp, ok := raw["input"].(string); ok {
+			f.Input = inp
+		}
+		// Re-unmarshal just the 'fields' value into map[string]FieldConfig
+		type inlineShape struct {
+			Input  string                 `yaml:"input"`
+			Fields map[string]FieldConfig `yaml:"fields"`
+		}
+		var shape inlineShape
+		if err := unmarshal(&shape); err != nil {
+			return fmt.Errorf("inline fields: %w", err)
+		}
+		if len(shape.Fields) == 0 {
+			return fmt.Errorf("inline 'fields' must be a non-empty map")
+		}
+		f.Fields = shape.Fields
+		return nil
+	}
+
+	return fmt.Errorf("field map must have a 'handler' key (sub-handler) or a 'fields' key (inline object)")
 }

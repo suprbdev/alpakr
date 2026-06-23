@@ -148,20 +148,41 @@ Output is one JSON object per line (NDJSON), regardless of the configured output
 
 ### Field values
 
-Each field value is either:
+Each field value is one of:
 
 - A **jq expression** string — evaluated against the current record
-- A **sub-handler reference** — delegates to another handler, enabling nested/relational data without duplication
+- An **inline object** — a `fields:` map of field definitions, evaluated against the same record (or a narrowed sub-selection via `input`). The explicit `fields:` key avoids ambiguity with source data that contains keys named `handler` or `input`.
+- A **sub-handler reference** — delegates to a named handler, for shared structures used in multiple places
 
 ```yaml
 fields:
   # jq expression
   title: ".name | ascii_downcase"
 
-  # sub-handler reference
+  # inline nested object — no separate handler needed
   location:
-    handler: place   # name of handler to run
-    input: ".loc"    # jq selector to extract input (defaults to .)
+    input: ".loc"   # optional: narrow data before evaluating nested fields
+    fields:
+      city:    ".city"
+      country: ".country_code | ascii_upcase"
+
+  # sub-handler reference
+  category:
+    handler: cat        # name of handler to run
+    input: ".category"  # jq selector to extract input (defaults to .)
+```
+
+Inline objects can nest arbitrarily deep:
+
+```yaml
+fields:
+  address:
+    fields:
+      street: ".street"
+      geo:
+        fields:
+          lat: ".lat"
+          lng: ".lng"
 ```
 
 ### Nested data

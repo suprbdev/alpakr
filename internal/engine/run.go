@@ -57,38 +57,64 @@ func (e *Engine) runOne(handlerName string, h config.HandlerConfig, data interfa
 		}
 	}
 
-	out := make(map[string]interface{}, len(h.Fields))
-	for fieldName, f := range h.Fields {
-		var val interface{}
-		var err error
+	return e.buildObject(handlerName, h.Fields, data)
+}
 
-		if f.Handler != "" {
-			subInput := data
-			if f.Input != "" {
-				subInput, err = e.evalExpr(f.Input, data)
-				if err != nil {
-					return nil, fmt.Errorf("handler %q field %q sub-input: %w", handlerName, fieldName, err)
-				}
-			}
-			val, err = e.Run(f.Handler, subInput)
-			if err != nil {
-				return nil, fmt.Errorf("handler %q field %q: %w", handlerName, fieldName, err)
-			}
-		} else {
-			key := handlerName + "." + fieldName
-			code, ok := e.codes.fields[key]
-			if !ok {
-				return nil, fmt.Errorf("handler %q field %q: missing compiled code", handlerName, fieldName)
-			}
-			val, err = runFirst(code, data)
-			if err != nil {
-				return nil, fmt.Errorf("handler %q field %q: %w", handlerName, fieldName, err)
-			}
+// buildObject evaluates a map of FieldConfigs against data and returns the output map.
+// path is a dot-joined string used for error messages and compiled code lookup.
+func (e *Engine) buildObject(path string, fields map[string]config.FieldConfig, data interface{}) (map[string]interface{}, error) {
+	out := make(map[string]interface{}, len(fields))
+	for fieldName, f := range fields {
+		val, err := e.evalField(path+"."+fieldName, f, data)
+		if err != nil {
+			return nil, err
 		}
-
 		out[fieldName] = val
 	}
 	return out, nil
+}
+
+func (e *Engine) evalField(path string, f config.FieldConfig, data interface{}) (interface{}, error) {
+	// Sub-handler reference
+	if f.Handler != "" {
+		subInput := data
+		if f.Input != "" {
+			var err error
+			subInput, err = e.evalExpr(f.Input, data)
+			if err != nil {
+				return nil, fmt.Errorf("%s sub-input: %w", path, err)
+			}
+		}
+		val, err := e.Run(f.Handler, subInput)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", path, err)
+		}
+		return val, nil
+	}
+
+	// Inline nested fields
+	if f.Fields != nil {
+		subData := data
+		if f.Input != "" {
+			var err error
+			subData, err = e.evalExpr(f.Input, data)
+			if err != nil {
+				return nil, fmt.Errorf("%s input: %w", path, err)
+			}
+		}
+		return e.buildObject(path, f.Fields, subData)
+	}
+
+	// jq expression — look up pre-compiled code
+	code, ok := e.codes.fields[path]
+	if !ok {
+		return nil, fmt.Errorf("%s: missing compiled code", path)
+	}
+	val, err := runFirst(code, data)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	return val, nil
 }
 
 // evalExpr compiles and runs a one-off jq expression (used for sub-handler input selectors).

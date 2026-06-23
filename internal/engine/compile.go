@@ -38,18 +38,33 @@ func compileHandlers(handlers map[string]config.HandlerConfig, fnOpts []gojq.Com
 		}
 
 		for fieldName, f := range h.Fields {
-			if f.Expr == "" {
-				continue
+			if err := compileField(cc, name+"."+fieldName, f, fnOpts); err != nil {
+				return nil, err
 			}
-			code, err := compileExpr(f.Expr, fnOpts)
-			if err != nil {
-				return nil, fmt.Errorf("handler %q field %q: %w", name, fieldName, err)
-			}
-			cc.fields[name+"."+fieldName] = code
 		}
 	}
 
 	return cc, nil
+}
+
+// compileField recursively compiles jq expressions in a FieldConfig tree.
+// path is the dotted key used as the lookup key in cc.fields.
+func compileField(cc *compiledCodes, path string, f config.FieldConfig, fnOpts []gojq.CompilerOption) error {
+	if f.Expr != "" {
+		code, err := compileExpr(f.Expr, fnOpts)
+		if err != nil {
+			return fmt.Errorf("field %q: %w", path, err)
+		}
+		cc.fields[path] = code
+		return nil
+	}
+	// Inline nested fields — recurse; sub-handler and handler-with-no-expr have nothing to compile here
+	for nestedName, nested := range f.Fields {
+		if err := compileField(cc, path+"."+nestedName, nested, fnOpts); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func compileExpr(expr string, fnOpts []gojq.CompilerOption) (*gojq.Code, error) {

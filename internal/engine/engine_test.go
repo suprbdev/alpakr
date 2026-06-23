@@ -233,6 +233,95 @@ func TestRun_UnknownHandler(t *testing.T) {
 	}
 }
 
+func inlineFields(input string, fields map[string]config.FieldConfig) config.FieldConfig {
+	return config.FieldConfig{Input: input, Fields: fields}
+}
+
+func TestRun_InlineFields(t *testing.T) {
+	e := mustEngine(t, cfg(map[string]config.HandlerConfig{
+		"root": {
+			Fields: map[string]config.FieldConfig{
+				"name": field(".name"),
+				"location": inlineFields(".loc", map[string]config.FieldConfig{
+					"city":    field(".city"),
+					"country": field(".country | ascii_upcase"),
+				}),
+			},
+		},
+	}))
+
+	data := map[string]interface{}{
+		"name": "alice",
+		"loc":  map[string]interface{}{"city": "London", "country": "gb"},
+	}
+	result, err := e.Run("root", data)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	out := result.(map[string]interface{})
+	loc := out["location"].(map[string]interface{})
+	if loc["city"] != "London" {
+		t.Errorf("city = %v, want London", loc["city"])
+	}
+	if loc["country"] != "GB" {
+		t.Errorf("country = %v, want GB", loc["country"])
+	}
+}
+
+func TestRun_InlineFields_NoInput(t *testing.T) {
+	e := mustEngine(t, cfg(map[string]config.HandlerConfig{
+		"root": {
+			Fields: map[string]config.FieldConfig{
+				"meta": inlineFields("", map[string]config.FieldConfig{
+					"id":   field(".id"),
+					"slug": field(".name | slugify"),
+				}),
+			},
+		},
+	}))
+
+	data := map[string]interface{}{"id": float64(7), "name": "Hello World"}
+	result, err := e.Run("root", data)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	meta := result.(map[string]interface{})["meta"].(map[string]interface{})
+	if meta["id"] != float64(7) {
+		t.Errorf("id = %v, want 7", meta["id"])
+	}
+	if meta["slug"] != "hello-world" {
+		t.Errorf("slug = %v, want hello-world", meta["slug"])
+	}
+}
+
+func TestRun_InlineFields_DeepNesting(t *testing.T) {
+	e := mustEngine(t, cfg(map[string]config.HandlerConfig{
+		"root": {
+			Fields: map[string]config.FieldConfig{
+				"a": inlineFields("", map[string]config.FieldConfig{
+					"b": inlineFields("", map[string]config.FieldConfig{
+						"val": field(".x"),
+					}),
+				}),
+			},
+		},
+	}))
+
+	data := map[string]interface{}{"x": "deep"}
+	result, err := e.Run("root", data)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	a := result.(map[string]interface{})["a"].(map[string]interface{})
+	b := a["b"].(map[string]interface{})
+	if b["val"] != "deep" {
+		t.Errorf("val = %v, want deep", b["val"])
+	}
+}
+
 func TestCompile_BadJQExpression(t *testing.T) {
 	_, err := New(cfg(map[string]config.HandlerConfig{
 		"root": {
