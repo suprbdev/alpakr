@@ -124,6 +124,10 @@ output:
 # Run a handler: alpakr run --handler <name>
 # Default:       if a handler named 'root' exists, it is used automatically.
 #                Otherwise --handler is required.
+#
+# Limit records: alpakr run --limit 10
+#   Stops after writing 10 output records. Filtered-out records do not count
+#   toward the limit. Works for all source types including ndjson streaming.
 handlers:
 
   # ---------------------------------------------------------------------------

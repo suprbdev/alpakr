@@ -16,6 +16,9 @@ import (
 )
 
 var handlerName string
+var limitRecords int
+
+var errLimitReached = fmt.Errorf("limit reached")
 
 var runCmd = &cobra.Command{
 	Use:   "run",
@@ -25,6 +28,7 @@ var runCmd = &cobra.Command{
 
 func init() {
 	runCmd.Flags().StringVar(&handlerName, "handler", "", "entry-point handler name (defaults to 'root' if it exists)")
+	runCmd.Flags().IntVar(&limitRecords, "limit", 0, "maximum number of records to process (0 = no limit)")
 	rootCmd.AddCommand(runCmd)
 }
 
@@ -83,7 +87,11 @@ func runRun(cmd *cobra.Command, _ []string) error {
 		if !ok {
 			return fmt.Errorf("output format does not support streaming")
 		}
-		return ndjson.Stream(func(record interface{}) error {
+		written := 0
+		err = ndjson.Stream(func(record interface{}) error {
+			if limitRecords > 0 && written >= limitRecords {
+				return errLimitReached
+			}
 			result, rerr := eng.Run(handlerName, record)
 			if rerr != nil {
 				return rerr
@@ -91,8 +99,13 @@ func runRun(cmd *cobra.Command, _ []string) error {
 			if result == nil {
 				return nil // filtered out
 			}
+			written++
 			return sw.WriteOne(result)
 		})
+		if err == errLimitReached {
+			return nil
+		}
+		return err
 	}
 
 	// Non-NDJSON: load full source then run
@@ -112,6 +125,13 @@ func runRun(cmd *cobra.Command, _ []string) error {
 	result, err := eng.Run(handlerName, data)
 	if err != nil {
 		return err
+	}
+
+	// Apply limit to array results
+	if limitRecords > 0 {
+		if arr, ok := result.([]interface{}); ok && len(arr) > limitRecords {
+			result = arr[:limitRecords]
+		}
 	}
 
 	// Write output

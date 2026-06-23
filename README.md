@@ -28,6 +28,7 @@ alpakr list-handlers                   # print handler names defined in config
 alpakr run | jq .                      # pipe output to other tools
 cat data.json | alpakr run             # pipe data in — stdin detected automatically, source config ignored
 cat access.ndjson | alpakr run         # ndjson stdin — streams line by line, no full file in memory
+alpakr run --limit 10                  # process only the first 10 records
 ```
 
 ## Config
@@ -140,6 +141,8 @@ handlers:
 ```
 
 Output is one JSON object per line (NDJSON), regardless of the configured output format. Pipe via stdin works the same way — `cat large.ndjson | alpakr run` streams without buffering.
+
+`--limit N` works with NDJSON sources and stops after N records have been written (filtered-out records don't count toward the limit).
 
 ### Field values
 
