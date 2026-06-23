@@ -1,0 +1,28 @@
+# Demonstrates:
+#   - ndjson source format for streaming large log files
+#   - filter to keep only error responses (4xx/5xx)
+#   - computed field using jq expression
+#   - slugify on HTTP method
+#   - date reformatting from ISO 8601
+
+version: "1"
+
+source:
+  path: ./data/access.ndjson
+  format: ndjson
+
+output:
+  format: json
+  indent: 2
+
+handlers:
+  root:
+    filter: ".status >= 400"
+    fields:
+      time:     '.ts | strptime("%Y-%m-%dT%H:%M:%SZ") | strftime("%d %b %Y %H:%M:%S")'
+      method:   ".method"
+      path:     ".path"
+      status:   ".status"
+      duration: ".duration_ms"
+      ip:       ".ip"
+      error_class: "if .status >= 500 then \"server_error\" elif .status >= 400 then \"client_error\" else \"ok\" end"

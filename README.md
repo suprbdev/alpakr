@@ -27,6 +27,7 @@ alpakr list-handlers                   # print handler names defined in config
 
 alpakr run | jq .                      # pipe output to other tools
 cat data.json | alpakr run             # pipe data in — stdin detected automatically, source config ignored
+cat access.ndjson | alpakr run         # ndjson stdin — streams line by line, no full file in memory
 ```
 
 ## Config
@@ -39,7 +40,7 @@ version: "1"
 source:
   path: ./data/records.json   # local file — mutually exclusive with url:
   # url: https://example.com/data.json
-  # format: json              # json | yaml — auto-detected from extension; stdin defaults to json
+  # format: json              # json | yaml | ndjson — auto-detected from extension; stdin defaults to json
   # method: POST              # HTTP method (default: GET). POST/PUT/PATCH required when body is set.
   # headers:
   #   Authorization: "Bearer <token>"
@@ -118,6 +119,27 @@ handlers:
 ```
 
 When no `root` handler is defined, `--handler` is required. The error message lists available handler names.
+
+### NDJSON (streaming)
+
+Set `format: ndjson` to stream newline-delimited JSON files without loading the full file into memory. Each line is decoded, passed through the handler, and written to output immediately — suitable for gigabyte-scale log files or event streams.
+
+```yaml
+source:
+  path: ./data/access.ndjson
+  format: ndjson
+
+handlers:
+  root:
+    filter: ".status >= 400"   # each line is one record — no 'each: true' needed
+    fields:
+      time:   '.ts | strptime("%Y-%m-%dT%H:%M:%SZ") | strftime("%d %b %Y %H:%M:%S")'
+      method: ".method"
+      path:   ".path"
+      status: ".status"
+```
+
+Output is one JSON object per line (NDJSON), regardless of the configured output format. Pipe via stdin works the same way — `cat large.ndjson | alpakr run` streams without buffering.
 
 ### Field values
 

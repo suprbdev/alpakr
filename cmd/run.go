@@ -54,23 +54,58 @@ func runRun(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("handler %q not found in config; available: %s", handlerName, handlerNames(cfg))
 	}
 
-	// Load source for the selected handler; stdin pipe takes priority
+	// Run engine
+	eng, err := engine.New(cfg)
+	if err != nil {
+		return err
+	}
+
+	srcCfg := cfg.SourceFor(handlerName)
+
+	// NDJSON: stream records one at a time to avoid loading full file into memory
+	if srcCfg.Format == "ndjson" {
+		var ndjson *source.NdjsonSource
+		if stdinIsPipe() {
+			ndjson = &source.NdjsonSource{}
+		} else {
+			f, openErr := os.Open(srcCfg.Path)
+			if openErr != nil {
+				return fmt.Errorf("opening ndjson file: %w", openErr)
+			}
+			defer f.Close()
+			ndjson = &source.NdjsonSource{Reader: f}
+		}
+		w, werr := buildWriter(cfg)
+		if werr != nil {
+			return werr
+		}
+		sw, ok := w.(streamWriter)
+		if !ok {
+			return fmt.Errorf("output format does not support streaming")
+		}
+		return ndjson.Stream(func(record interface{}) error {
+			result, rerr := eng.Run(handlerName, record)
+			if rerr != nil {
+				return rerr
+			}
+			if result == nil {
+				return nil // filtered out
+			}
+			return sw.WriteOne(result)
+		})
+	}
+
+	// Non-NDJSON: load full source then run
 	var src source.Source
 	if stdinIsPipe() {
-		src = &source.StdinSource{Format: cfg.SourceFor(handlerName).Format}
+		src = &source.StdinSource{Format: srcCfg.Format}
 	} else {
-		src, err = buildSource(cfg.SourceFor(handlerName))
+		src, err = buildSource(srcCfg)
 		if err != nil {
 			return err
 		}
 	}
 	data, err := src.Load()
-	if err != nil {
-		return err
-	}
-
-	// Run engine
-	eng, err := engine.New(cfg)
 	if err != nil {
 		return err
 	}
@@ -89,6 +124,10 @@ func runRun(cmd *cobra.Command, _ []string) error {
 
 type writer interface {
 	Write(v interface{}) error
+}
+
+type streamWriter interface {
+	WriteOne(v interface{}) error
 }
 
 func buildWriter(cfg *config.Config) (writer, error) {

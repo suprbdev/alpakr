@@ -1,0 +1,10 @@
+{"ts":"2024-11-01T08:02:11Z","method":"GET","path":"/api/users","status":200,"duration_ms":43,"bytes":1824,"ip":"203.0.113.12","user_agent":"Mozilla/5.0"}
+{"ts":"2024-11-01T08:02:15Z","method":"POST","path":"/api/orders","status":201,"duration_ms":112,"bytes":340,"ip":"203.0.113.44","user_agent":"curl/8.1.0"}
+{"ts":"2024-11-01T08:02:19Z","method":"GET","path":"/api/products/99","status":404,"duration_ms":8,"bytes":62,"ip":"198.51.100.7","user_agent":"python-httpx/0.25.0"}
+{"ts":"2024-11-01T08:02:34Z","method":"DELETE","path":"/api/orders/42","status":403,"duration_ms":5,"bytes":89,"ip":"198.51.100.7","user_agent":"python-httpx/0.25.0"}
+{"ts":"2024-11-01T08:03:01Z","method":"GET","path":"/api/users","status":200,"duration_ms":38,"bytes":1824,"ip":"203.0.113.99","user_agent":"Mozilla/5.0"}
+{"ts":"2024-11-01T08:03:45Z","method":"PUT","path":"/api/users/7","status":200,"duration_ms":67,"bytes":210,"ip":"203.0.113.12","user_agent":"Mozilla/5.0"}
+{"ts":"2024-11-01T08:04:02Z","method":"GET","path":"/api/orders","status":500,"duration_ms":2103,"bytes":94,"ip":"203.0.113.44","user_agent":"curl/8.1.0"}
+{"ts":"2024-11-01T08:04:18Z","method":"GET","path":"/api/products","status":200,"duration_ms":55,"bytes":9821,"ip":"203.0.113.99","user_agent":"Mozilla/5.0"}
+{"ts":"2024-11-01T08:05:00Z","method":"POST","path":"/api/auth/login","status":401,"duration_ms":12,"bytes":71,"ip":"192.0.2.55","user_agent":"curl/8.1.0"}
+{"ts":"2024-11-01T08:05:33Z","method":"POST","path":"/api/auth/login","status":200,"duration_ms":98,"bytes":188,"ip":"192.0.2.55","user_agent":"curl/8.1.0"}

@@ -18,13 +18,15 @@ version: "1"
 # Rules:
 #   - 'path' and 'url' are mutually exclusive — specify exactly one
 #   - 'format' is optional — auto-detected from the file extension or URL path:
-#       .json         → json
-#       .yaml / .yml  → yaml
+#       .json          → json
+#       .yaml / .yml   → yaml
+#       .ndjson        → ndjson
 #     If the extension is absent or unrecognised, defaults to json
 #
 # Stdin piping: if data is piped to alpakr via stdin, the source config is
 # bypassed automatically. The 'format' here is still used to parse stdin data.
 # Usage: cat data.json | alpakr run -c config.yaml
+#        cat large.ndjson | alpakr run -c config.yaml
 source:
   # path: local file path, relative to this config file's directory
   path: ./data/records.json
@@ -32,8 +34,13 @@ source:
   # url: fetch data from a URL (mutually exclusive with path)
   # url: https://example.com/api/records.json
 
-  # format: explicitly set the input format — json | yaml
+  # format: explicitly set the input format — json | yaml | ndjson
   # Optional. Auto-detected from extension if omitted. Stdin defaults to json.
+  #
+  # ndjson (newline-delimited JSON): each line is one JSON object. alpakr
+  # streams the file line by line — no full file loaded into memory. Suitable
+  # for gigabyte-scale log files or event streams. Each record is passed
+  # directly to the handler (no 'each: true' needed — it is implied).
   # format: json
 
   # method: HTTP method for URL sources — GET | POST | PUT | PATCH | DELETE etc.
@@ -152,6 +159,9 @@ handlers:
     #
     # Error: if each is true but the input is not an array, alpakr exits with
     # an error identifying the handler.
+    #
+    # Note: not used with ndjson sources — each line is already one record and
+    # is passed to the handler individually by the streaming engine.
     each: true
 
     # filter: jq predicate expression. Evaluated against each record before
@@ -305,6 +315,27 @@ handlers:
       qty:        ".qty"
       unit_price: ".unit_price"
       line_total: ".qty * .unit_price | round2"
+
+
+  # ---------------------------------------------------------------------------
+  # ndjson_example
+  # Shows how to configure a handler for an ndjson (streaming) source.
+  # Set format: ndjson on the source — each line is fed to the handler as a
+  # single record. No 'each: true' or 'input' selector needed at the top level.
+  # Output is written one record at a time; the full file is never held in memory.
+  #
+  # To run: alpakr run --handler ndjson_example -c this-file.yaml
+  #   (requires a matching ndjson source in the 'sources' map, or top-level
+  #    source replaced with format: ndjson)
+  # ---------------------------------------------------------------------------
+  # ndjson_example:
+  #   source: events          # a sources entry with format: ndjson
+  #   filter: ".level == \"error\""
+  #   fields:
+  #     time:    '.ts | strptime("%Y-%m-%dT%H:%M:%SZ") | strftime("%d %b %Y %H:%M:%S")'
+  #     level:   ".level | ascii_upcase"
+  #     message: ".msg"
+  #     service: ".service"
 
 
 # =============================================================================
