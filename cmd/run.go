@@ -65,6 +65,11 @@ func runRun(cmd *cobra.Command, _ []string) error {
 	}
 
 	srcCfg := cfg.SourceFor(handlerName)
+	hasSource := srcCfg.Path != "" || srcCfg.URL != ""
+
+	if !hasSource && !stdinIsPipe() {
+		return fmt.Errorf("no source configured for handler %q and no data piped via stdin", handlerName)
+	}
 
 	// NDJSON: stream records one at a time to avoid loading full file into memory
 	if srcCfg.Format == "ndjson" {
@@ -111,7 +116,12 @@ func runRun(cmd *cobra.Command, _ []string) error {
 	// Non-NDJSON: load full source then run
 	var src source.Source
 	if stdinIsPipe() {
-		src = &source.StdinSource{Format: srcCfg.Format}
+		// Pass explicit format only when a source was configured; otherwise auto-detect.
+		stdinFormat := srcCfg.Format
+		if !hasSource {
+			stdinFormat = ""
+		}
+		src = &source.StdinSource{Format: stdinFormat}
 	} else {
 		src, err = buildSource(srcCfg)
 		if err != nil {

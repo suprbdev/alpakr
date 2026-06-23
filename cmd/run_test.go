@@ -38,6 +38,31 @@ func runWithArgs(t *testing.T, args ...string) string {
 	return buf.String()
 }
 
+// runWithArgsExpectError runs the command and returns the error (fails if no error).
+func runWithArgsExpectError(t *testing.T, args ...string) error {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := os.Stdout
+	os.Stdout = w
+
+	rootCmd.SetArgs(args)
+	handlerName = ""
+	limitRecords = 0
+	execErr := rootCmd.Execute()
+
+	w.Close()
+	os.Stdout = old
+	r.Close()
+
+	if execErr == nil {
+		t.Fatal("expected error but command succeeded")
+	}
+	return execErr
+}
+
 func writeTemp(t *testing.T, name, content string) string {
 	t.Helper()
 	p := filepath.Join(t.TempDir(), name)
@@ -206,5 +231,23 @@ handlers:
 	}
 	if first["id"].(float64) != 2 {
 		t.Errorf("first record id = %v, want 2", first["id"])
+	}
+}
+
+func TestNoSource_NoStdin_Error(t *testing.T) {
+	cfgFile := writeTemp(t, "alpakr.yaml", `
+version: "1"
+output:
+  format: json
+handlers:
+  root:
+    fields:
+      id: ".id"
+`)
+	// No stdin pipe in tests (os.Stdin is a regular file descriptor, not a pipe),
+	// so this should error at runtime.
+	err := runWithArgsExpectError(t, "run", "-c", cfgFile)
+	if err == nil {
+		t.Fatal("expected error when no source and no stdin pipe")
 	}
 }

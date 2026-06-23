@@ -26,7 +26,7 @@ alpakr validate                        # check config + compile all expressions
 alpakr list-handlers                   # print handler names defined in config
 
 alpakr run | jq .                      # pipe output to other tools
-cat data.json | alpakr run             # pipe data in — stdin detected automatically, source config ignored
+cat data.json | alpakr run             # pipe JSON/YAML via stdin — format auto-detected, no source config needed
 cat access.ndjson | alpakr run         # ndjson stdin — streams line by line, no full file in memory
 alpakr run --limit 10                  # process only the first 10 records
 ```
@@ -41,7 +41,9 @@ version: "1"
 source:
   path: ./data/records.json   # local file — mutually exclusive with url:
   # url: https://example.com/data.json
-  # format: json              # json | yaml | ndjson — auto-detected from extension; stdin defaults to json
+  # format: json              # json | yaml | ndjson — auto-detected from file extension
+                              # stdin: format auto-detected by peeking first byte ({ or [ → json, else yaml)
+                              # omit source entirely when piping via stdin
   # method: POST              # HTTP method (default: GET). POST/PUT/PATCH required when body is set.
   # headers:
   #   Authorization: "Bearer <token>"

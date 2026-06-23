@@ -31,9 +31,8 @@ func Load(path string) (*Config, error) {
 func validate(cfg *Config, configPath string) error {
 	hasDefaultSource := cfg.Source.Path != "" || cfg.Source.URL != ""
 
-	if !hasDefaultSource && len(cfg.Sources) == 0 {
-		return fmt.Errorf("config: must have 'source' or at least one entry in 'sources'")
-	}
+	// Source presence is not validated here — cmd/run.go enforces it at runtime
+	// because a piped stdin makes a source config optional.
 	if err := validateSourceConfig("source", cfg.Source); err != nil {
 		return err
 	}
@@ -54,7 +53,8 @@ func validate(cfg *Config, configPath string) error {
 			if _, ok := cfg.Sources[h.Source]; !ok {
 				return fmt.Errorf("config: handler %q references undefined source %q", name, h.Source)
 			}
-		} else if !hasDefaultSource {
+		} else if !hasDefaultSource && len(cfg.Sources) > 0 {
+			// Sources map exists but handler doesn't reference one and there's no default.
 			return fmt.Errorf("config: handler %q has no 'source' key and no default source is defined", name)
 		}
 		for fieldName, f := range h.Fields {
@@ -138,10 +138,11 @@ func detectFormat(s *SourceConfig) {
 	if src == "" {
 		src = s.URL
 	}
-	// stdin and URLs without extension default to JSON
 	switch strings.ToLower(filepath.Ext(src)) {
 	case ".yaml", ".yml":
 		s.Format = "yaml"
+	case ".ndjson":
+		s.Format = "ndjson"
 	default:
 		s.Format = "json"
 	}

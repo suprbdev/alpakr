@@ -53,6 +53,8 @@ handlers:
 }
 
 func TestLoadValidation_NoSource(t *testing.T) {
+	// No source is valid at config-load time — cmd/run.go enforces the requirement
+	// at runtime because piped stdin makes a source config optional.
 	_, err := loadString(t, `
 version: "1"
 handlers:
@@ -60,8 +62,8 @@ handlers:
     fields:
       id: ".id"
 `)
-	if err == nil {
-		t.Fatal("expected error for missing source")
+	if err != nil {
+		t.Fatalf("unexpected error for no-source config: %v", err)
 	}
 }
 

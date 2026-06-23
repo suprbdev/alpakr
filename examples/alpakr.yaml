@@ -23,9 +23,11 @@ version: "1"
 #       .ndjson        → ndjson
 #     If the extension is absent or unrecognised, defaults to json
 #
-# Stdin piping: if data is piped to alpakr via stdin, the source config is
-# bypassed automatically. The 'format' here is still used to parse stdin data.
-# Usage: cat data.json | alpakr run -c config.yaml
+# Stdin piping: if data is piped via stdin, the 'source' config is optional —
+# you can omit the source block entirely. Format is auto-detected by peeking
+# at the first byte: '{' or '[' → json; anything else → yaml. Set 'format:'
+# explicitly to override auto-detection, or to select ndjson streaming.
+# Usage: cat data.json | alpakr run -c config.yaml   (no source block needed)
 #        cat large.ndjson | alpakr run -c config.yaml
 source:
   # path: local file path, relative to this config file's directory
@@ -35,7 +37,10 @@ source:
   # url: https://example.com/api/records.json
 
   # format: explicitly set the input format — json | yaml | ndjson
-  # Optional. Auto-detected from extension if omitted. Stdin defaults to json.
+  # Optional. Auto-detected from file extension if omitted (.json → json,
+  # .yaml/.yml → yaml, .ndjson → ndjson).
+  # Stdin: format auto-detected by peeking first byte ('{' or '[' → json,
+  # else → yaml). Set format explicitly to override, or to select ndjson.
   #
   # ndjson (newline-delimited JSON): each line is one JSON object. alpakr
   # streams the file line by line — no full file loaded into memory. Suitable
