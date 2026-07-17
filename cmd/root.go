@@ -30,6 +30,11 @@ handler pipelines to transform and restructure it, and outputs
 JSON or YAML to stdout or a file.`,
 }
 
+// SetVersion wires the build-time version into the root command's --version flag.
+func SetVersion(v string) {
+	rootCmd.Version = v
+}
+
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)

@@ -29,6 +29,8 @@ alpakr run | jq .                      # pipe output to other tools
 cat data.json | alpakr run             # pipe JSON/YAML via stdin — format auto-detected, no source config needed
 cat access.ndjson | alpakr run         # ndjson stdin — streams line by line, no full file in memory
 alpakr run --limit 10                  # process only the first 10 records
+
+alpakr --version                       # print the build version
 ```
 
 ## Config
