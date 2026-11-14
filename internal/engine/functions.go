@@ -1,9 +1,8 @@
 package engine
 
 import (
-	"alpakr/internal/transform"
-
 	"github.com/itchyny/gojq"
+	"github.com/suprbdev/alpakr/internal/transform"
 )
 
 func customFunctions() []gojq.CompilerOption {

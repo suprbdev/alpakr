@@ -1,11 +1,11 @@
 package cmd
 
 import (
-	"alpakr/internal/config"
-	"alpakr/internal/engine"
 	"fmt"
 
 	"github.com/spf13/cobra"
+	"github.com/suprbdev/alpakr/internal/config"
+	"github.com/suprbdev/alpakr/internal/engine"
 )
 
 var validateCmd = &cobra.Command{

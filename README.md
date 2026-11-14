@@ -7,7 +7,7 @@ Useful for: migrating between schemas, importing externally sourced data, normal
 ## Install
 
 ```sh
-go install alpakr@latest
+go install github.com/suprbdev/alpakr@latest
 # or
 make build   # outputs to ./bin/alpakr
 ```

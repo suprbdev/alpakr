@@ -1,10 +1,10 @@
 package engine
 
 import (
-	"alpakr/internal/config"
 	"fmt"
 
 	"github.com/itchyny/gojq"
+	"github.com/suprbdev/alpakr/internal/config"
 )
 
 type compiledCodes struct {

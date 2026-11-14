@@ -1,8 +1,9 @@
 package engine
 
 import (
-	"alpakr/internal/config"
 	"testing"
+
+	"github.com/suprbdev/alpakr/internal/config"
 )
 
 func cfg(handlers map[string]config.HandlerConfig) *config.Config {
@@ -174,9 +175,9 @@ func TestRun_CustomFunctions(t *testing.T) {
 	e := mustEngine(t, cfg(map[string]config.HandlerConfig{
 		"root": {
 			Fields: map[string]config.FieldConfig{
-				"rounded": field(".miles * 1.60934 | round2"),
-				"slug":    field(".label | slugify"),
-				"as_int":  field(".score | to_int"),
+				"rounded":  field(".miles * 1.60934 | round2"),
+				"slug":     field(".label | slugify"),
+				"as_int":   field(".score | to_int"),
 				"as_float": field(".count | to_float"),
 			},
 		},
