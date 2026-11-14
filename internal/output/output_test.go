@@ -164,3 +164,29 @@ func TestScalarNode_MatchesYAMLEncode(t *testing.T) {
 		}
 	}
 }
+
+func TestNDJSONWriter(t *testing.T) {
+	var buf bytes.Buffer
+	w, err := New("NDJSON", 4, &buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Write([]interface{}{map[string]interface{}{"a": "<"}, 2, nil}); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Write(map[string]interface{}{"b": 1}); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Write(nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.WriteOne(3); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := buf.String(), "{\"a\":\"<\"}\n2\nnull\n{\"b\":1}\n3\n"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	if _, err := New("jsonl", 0, &buf); err != nil {
+		t.Errorf("jsonl alias: %v", err)
+	}
+}

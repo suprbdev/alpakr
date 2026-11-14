@@ -19,7 +19,8 @@ make build   # outputs to ./bin/alpakr
 alpakr run                             # uses alpakr.yaml/yml in cwd, defaults to 'root' handler
 alpakr run --handler staff             # run a specific handler
 alpakr run -c path/to/config.yaml      # explicit config path
-alpakr run --format yaml               # override output format
+alpakr run --format yaml               # override output format (json | yaml | ndjson)
+alpakr run -f ndjson | jq -c .         # one record per line
 alpakr run -o out.json                 # write to file instead of stdout
 
 alpakr validate                        # check config + compile all expressions
@@ -56,7 +57,7 @@ source:
   # timeout: 30s              # max wait for headers / each body read (default 30s; "0" = none)
 
 output:
-  format: json                # json | yaml (default: json)
+  format: json                # json | yaml | ndjson (one record per line) — default: json
   indent: 2                   # JSON indentation (default: 2; 0 = compact single line)
   # file: ./out/result.json   # write to file instead of stdout
 

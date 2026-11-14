@@ -48,6 +48,6 @@ func Execute() {
 
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&configPath, "config", "c", resolveConfigPath(), "path to config file (default: alpakr.yaml or alpakr.yml in current directory)")
-	rootCmd.PersistentFlags().StringVarP(&outputFormat, "format", "f", "", "output format override (json|yaml)")
+	rootCmd.PersistentFlags().StringVarP(&outputFormat, "format", "f", "", "output format override (json|yaml|ndjson)")
 	rootCmd.PersistentFlags().StringVarP(&outputFile, "output", "o", "", "output file path (default: stdout)")
 }

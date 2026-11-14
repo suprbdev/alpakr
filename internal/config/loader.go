@@ -61,9 +61,9 @@ func validate(cfg *Config, configPath string) error {
 		return fmt.Errorf("config: output.indent must be >= 0")
 	}
 	switch strings.ToLower(cfg.Output.Format) {
-	case "", "json", "yaml", "yml":
+	case "", "json", "yaml", "yml", "ndjson", "jsonl":
 	default:
-		return fmt.Errorf("config: output.format must be json or yaml (got %q)", cfg.Output.Format)
+		return fmt.Errorf("config: output.format must be json, yaml or ndjson (got %q)", cfg.Output.Format)
 	}
 	if len(cfg.Handlers) == 0 {
 		return fmt.Errorf("config: handlers must be non-empty")
