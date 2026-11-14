@@ -690,3 +690,45 @@ func TestCSVSourceConfig_Invalid(t *testing.T) {
 		}
 	}
 }
+
+func TestPaginationConfig(t *testing.T) {
+	cfg := mustLoad(t, `
+version: "1"
+sources:
+  a:
+    url: https://example.com/items
+    pagination:
+      next: ".links.next"
+      records: ".data"
+  b:
+    url: https://example.com/items
+    pagination:
+      next: ".next"
+      max_pages: 0
+handlers:
+  root:
+    source: a
+    fields:
+      id: ".id"
+`)
+	if got := cfg.Sources["a"].Pagination.MaxPagesLimit(); got != DefaultMaxPages {
+		t.Errorf("default max_pages = %d", got)
+	}
+	if got := cfg.Sources["b"].Pagination.MaxPagesLimit(); got != 0 {
+		t.Errorf("explicit max_pages 0 = %d", got)
+	}
+}
+
+func TestPaginationConfig_Invalid(t *testing.T) {
+	for name, src := range map[string]string{
+		"path source":  "  path: /tmp/x.json\n  pagination:\n    next: .n\n",
+		"missing next": "  url: https://example.com/x\n  pagination:\n    records: .d\n",
+		"negative max": "  url: https://example.com/x\n  pagination:\n    next: .n\n    max_pages: -1\n",
+		"ndjson pages": "  url: https://example.com/x.ndjson\n  pagination:\n    next: .n\n",
+		"unknown key":  "  url: https://example.com/x\n  pagination:\n    nxt: .n\n",
+	} {
+		if _, err := loadString(t, "version: \"1\"\nsource:\n"+src+"handlers:\n  root:\n    fields:\n      id: \".id\"\n"); err == nil {
+			t.Errorf("%s: expected error", name)
+		}
+	}
+}

@@ -127,6 +127,20 @@ func validateSourceConfig(label string, s SourceConfig) error {
 	if err := checkDelimiter(label, s.Delimiter); err != nil {
 		return err
 	}
+	if p := s.Pagination; p != nil {
+		if s.URL == "" {
+			return fmt.Errorf("config: %s: 'pagination' requires 'url'", label)
+		}
+		if p.Next == "" {
+			return fmt.Errorf("config: %s.pagination: 'next' is required", label)
+		}
+		if p.MaxPages != nil && *p.MaxPages < 0 {
+			return fmt.Errorf("config: %s.pagination: 'max_pages' must be >= 0", label)
+		}
+		if f, _ := effectiveFormat(s); f != "json" && f != "yaml" && f != "yml" {
+			return fmt.Errorf("config: %s: pagination needs json or yaml pages (format is %s)", label, f)
+		}
+	}
 	if s.URL == "" {
 		if len(s.Headers) > 0 {
 			return fmt.Errorf("config: %s: 'headers' requires 'url'", label)
