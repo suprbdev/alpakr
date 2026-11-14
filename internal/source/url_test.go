@@ -13,7 +13,9 @@ func TestURLSource_GETDefault(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotMethod = r.Method
 		w.Header().Set("Content-Type", "application/json")
-		io.WriteString(w, `{"name":"alice"}`)
+		if _, err := io.WriteString(w, `{"name":"alice"}`); err != nil {
+			t.Error(err)
+		}
 	}))
 	defer srv.Close()
 
@@ -38,7 +40,9 @@ func TestURLSource_CustomMethod(t *testing.T) {
 	var gotMethod string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotMethod = r.Method
-		io.WriteString(w, `[]`)
+		if _, err := io.WriteString(w, `[]`); err != nil {
+			t.Error(err)
+		}
 	}))
 	defer srv.Close()
 
@@ -56,7 +60,9 @@ func TestURLSource_Headers(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotAuth = r.Header.Get("Authorization")
 		gotAccept = r.Header.Get("Accept")
-		io.WriteString(w, `{}`)
+		if _, err := io.WriteString(w, `{}`); err != nil {
+			t.Error(err)
+		}
 	}))
 	defer srv.Close()
 
@@ -86,7 +92,9 @@ func TestURLSource_POSTWithBody(t *testing.T) {
 		gotContentType = r.Header.Get("Content-Type")
 		b, _ := io.ReadAll(r.Body)
 		gotBody = string(b)
-		io.WriteString(w, `{"ok":true}`)
+		if _, err := io.WriteString(w, `{"ok":true}`); err != nil {
+			t.Error(err)
+		}
 	}))
 	defer srv.Close()
 
@@ -128,7 +136,9 @@ func TestURLSource_HTTPError(t *testing.T) {
 
 func TestURLSource_YAMLResponse(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		io.WriteString(w, "name: bob\nage: 25\n")
+		if _, err := io.WriteString(w, "name: bob\nage: 25\n"); err != nil {
+			t.Error(err)
+		}
 	}))
 	defer srv.Close()
 
@@ -158,7 +168,7 @@ func TestURLSource_Open(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer body.Close()
+	defer func() { _ = body.Close() }()
 	data, err := io.ReadAll(body)
 	if err != nil {
 		t.Fatal(err)

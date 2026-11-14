@@ -1,6 +1,7 @@
 package config
 
 import (
+	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
@@ -197,7 +198,7 @@ handlers:
     fields:
       id: ".id"
 `)
-	if cfg.Source.Method != "POST" {
+	if cfg.Source.Method != http.MethodPost {
 		t.Errorf("method = %q, want POST (uppercased)", cfg.Source.Method)
 	}
 	if cfg.Source.Body != `{"q":"test"}` {
@@ -246,7 +247,9 @@ func loadString(t *testing.T, content string) (*Config, error) {
 	if _, err := f.WriteString(content); err != nil {
 		t.Fatalf("write temp: %v", err)
 	}
-	f.Close()
+	if err := f.Close(); err != nil {
+		t.Fatalf("close temp: %v", err)
+	}
 	// Make source path absolute so validate doesn't fail on relative resolution
 	return Load(filepath.Clean(f.Name()))
 }

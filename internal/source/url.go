@@ -42,7 +42,7 @@ func (u *URLSource) Open() (io.ReadCloser, error) {
 		return nil, fmt.Errorf("fetching %q: %w", u.URL, err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		return nil, fmt.Errorf("fetching %q: HTTP %d", u.URL, resp.StatusCode)
 	}
 	return resp.Body, nil
@@ -54,7 +54,7 @@ func (u *URLSource) Load() (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer body.Close()
+	defer func() { _ = body.Close() }()
 
 	data, err := io.ReadAll(body)
 	if err != nil {

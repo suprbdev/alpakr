@@ -28,11 +28,13 @@ func runWithArgs(t *testing.T, args ...string) string {
 	resetFlags(args)
 	execErr := rootCmd.Execute()
 
-	w.Close()
+	_ = w.Close()
 	os.Stdout = old
 
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	if _, err := buf.ReadFrom(r); err != nil {
+		t.Fatal(err)
+	}
 
 	if execErr != nil {
 		t.Fatalf("command failed: %v\noutput: %s", execErr, buf.String())
@@ -53,9 +55,9 @@ func runWithArgsExpectError(t *testing.T, args ...string) error {
 	resetFlags(args)
 	execErr := rootCmd.Execute()
 
-	w.Close()
+	_ = w.Close()
 	os.Stdout = old
-	r.Close()
+	_ = r.Close()
 
 	if execErr == nil {
 		t.Fatal("expected error but command succeeded")
@@ -75,6 +77,13 @@ func resetFlags(args []string) {
 	}
 }
 
+func mustWriteFile(t *testing.T, path string, data []byte, perm os.FileMode) {
+	t.Helper()
+	if err := os.WriteFile(path, data, perm); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func writeTemp(t *testing.T, name, content string) string {
 	t.Helper()
 	p := filepath.Join(t.TempDir(), name)
@@ -87,10 +96,10 @@ func writeTemp(t *testing.T, name, content string) string {
 func TestLimit_ArraySource(t *testing.T) {
 	dir := t.TempDir()
 	dataFile := filepath.Join(dir, "data.json")
-	os.WriteFile(dataFile, []byte(`[{"id":1},{"id":2},{"id":3}]`), 0o644)
+	mustWriteFile(t, dataFile, []byte(`[{"id":1},{"id":2},{"id":3}]`), 0o644)
 
 	cfgFile := filepath.Join(dir, "alpakr.yaml")
-	os.WriteFile(cfgFile, []byte(`
+	mustWriteFile(t, cfgFile, []byte(`
 version: "1"
 source:
   path: `+dataFile+`
@@ -120,10 +129,10 @@ handlers:
 func TestLimit_ArraySource_LargerThanInput(t *testing.T) {
 	dir := t.TempDir()
 	dataFile := filepath.Join(dir, "data.json")
-	os.WriteFile(dataFile, []byte(`[{"id":1},{"id":2}]`), 0o644)
+	mustWriteFile(t, dataFile, []byte(`[{"id":1},{"id":2}]`), 0o644)
 
 	cfgFile := filepath.Join(dir, "alpakr.yaml")
-	os.WriteFile(cfgFile, []byte(`
+	mustWriteFile(t, cfgFile, []byte(`
 version: "1"
 source:
   path: `+dataFile+`
@@ -150,10 +159,10 @@ handlers:
 func TestLimit_NoLimit(t *testing.T) {
 	dir := t.TempDir()
 	dataFile := filepath.Join(dir, "data.json")
-	os.WriteFile(dataFile, []byte(`[{"id":1},{"id":2},{"id":3}]`), 0o644)
+	mustWriteFile(t, dataFile, []byte(`[{"id":1},{"id":2},{"id":3}]`), 0o644)
 
 	cfgFile := filepath.Join(dir, "alpakr.yaml")
-	os.WriteFile(cfgFile, []byte(`
+	mustWriteFile(t, cfgFile, []byte(`
 version: "1"
 source:
   path: `+dataFile+`
@@ -180,13 +189,13 @@ handlers:
 func TestLimit_NdjsonSource(t *testing.T) {
 	dir := t.TempDir()
 	dataFile := filepath.Join(dir, "data.ndjson")
-	os.WriteFile(dataFile, []byte(`{"id":1}
+	mustWriteFile(t, dataFile, []byte(`{"id":1}
 {"id":2}
 {"id":3}
 `), 0o644)
 
 	cfgFile := filepath.Join(dir, "alpakr.yaml")
-	os.WriteFile(cfgFile, []byte(`
+	mustWriteFile(t, cfgFile, []byte(`
 version: "1"
 source:
   path: `+dataFile+`
@@ -210,7 +219,7 @@ func TestLimit_NdjsonSource_WithFilter(t *testing.T) {
 	dir := t.TempDir()
 	dataFile := filepath.Join(dir, "data.ndjson")
 	// 5 records, 3 pass filter (.v > 1), limit 2 → expect 2 output
-	os.WriteFile(dataFile, []byte(`{"id":1,"v":0}
+	mustWriteFile(t, dataFile, []byte(`{"id":1,"v":0}
 {"id":2,"v":2}
 {"id":3,"v":3}
 {"id":4,"v":4}
@@ -218,7 +227,7 @@ func TestLimit_NdjsonSource_WithFilter(t *testing.T) {
 `), 0o644)
 
 	cfgFile := filepath.Join(dir, "alpakr.yaml")
-	os.WriteFile(cfgFile, []byte(`
+	mustWriteFile(t, cfgFile, []byte(`
 version: "1"
 source:
   path: `+dataFile+`
@@ -282,7 +291,7 @@ handlers:
 		rootCmd.SetErr(nil)
 	}()
 
-	runWithArgsExpectError(t, "run", "-c", cfgFile)
+	_ = runWithArgsExpectError(t, "run", "-c", cfgFile)
 	if strings.Contains(stderr.String(), "Usage:") {
 		t.Errorf("runtime error printed usage:\n%s", stderr.String())
 	}
@@ -300,7 +309,7 @@ func TestFlagError_ShowsUsage(t *testing.T) {
 		rootCmd.SetErr(nil)
 	}()
 
-	runWithArgsExpectError(t, "run", "--no-such-flag")
+	_ = runWithArgsExpectError(t, "run", "--no-such-flag")
 	if !strings.Contains(stderr.String(), "Usage:") {
 		t.Errorf("flag error should print usage, got:\n%s", stderr.String())
 	}
