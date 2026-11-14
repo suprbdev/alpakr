@@ -25,6 +25,12 @@ version: "1"
 #       .ndjson / .jsonl   → ndjson
 #     If the extension is absent or unrecognised, defaults to json
 #
+# Value handling:
+#   - Integers keep full precision (e.g. 64-bit IDs beyond 2^53 are not rounded)
+#   - YAML timestamps (2024-01-01) are kept as their source text strings —
+#     use strptime/fromdate in jq to parse them
+#   - YAML map keys that are not strings (1:, true:) become string keys ("1", "true")
+#
 # Stdin piping: if data is piped via stdin, the 'source' config is optional —
 # you can omit the source block entirely. Format is auto-detected by peeking
 # at the first byte: '{' or '[' → json; anything else → yaml. Set 'format:'

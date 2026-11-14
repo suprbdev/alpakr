@@ -63,7 +63,7 @@ func TestParseDispatch(t *testing.T) {
 		if err != nil {
 			t.Errorf("parse(%q): %v", format, err)
 		}
-		if v.(map[string]interface{})["x"] != float64(1) {
+		if v.(map[string]interface{})["x"] != 1 {
 			t.Errorf("parse(%q): x = %v, want 1", format, v.(map[string]interface{})["x"])
 		}
 	}

@@ -437,3 +437,45 @@ handlers:
 		t.Errorf("output = %q, want %q", got, want)
 	}
 }
+
+func TestRun_YAMLSourceTimestampsAndKeys(t *testing.T) {
+	dataFile := writeTemp(t, "data.yaml", "- d: 2024-01-01\n  codes: {1: one, 2: two}\n")
+	cfgFile := writeTemp(t, "alpakr.yaml", `
+version: "1"
+source:
+  path: `+dataFile+`
+output:
+  indent: 0
+handlers:
+  root:
+    each: true
+    fields:
+      d: ".d"
+      type: ".d | type"
+      one: '.codes["1"]'
+`)
+	if got, want := runWithArgs(t, "run", "-c", cfgFile), `[{"d":"2024-01-01","one":"one","type":"string"}]`+"\n"; got != want {
+		t.Errorf("output = %q, want %q", got, want)
+	}
+}
+
+func TestRun_LargeIntegersPreserved(t *testing.T) {
+	dataFile := writeTemp(t, "data.json", `[{"id":12345678901234567890,"n":9007199254740993}]`)
+	cfgFile := writeTemp(t, "alpakr.yaml", `
+version: "1"
+source:
+  path: `+dataFile+`
+output:
+  indent: 0
+handlers:
+  root:
+    each: true
+    fields:
+      id: ".id"
+      n: ".n"
+      next: ".n + 1"
+`)
+	if got, want := runWithArgs(t, "run", "-c", cfgFile), `[{"id":12345678901234567890,"n":9007199254740993,"next":9007199254740994}]`+"\n"; got != want {
+		t.Errorf("output = %q, want %q", got, want)
+	}
+}

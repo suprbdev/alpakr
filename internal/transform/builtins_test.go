@@ -1,6 +1,10 @@
 package transform
 
-import "testing"
+import (
+	"math"
+	"math/big"
+	"testing"
+)
 
 func TestRound2(t *testing.T) {
 	tests := []struct {
@@ -79,5 +83,31 @@ func TestToFloat(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("ToFloat(%v) = %v, want %v", tt.in, got, tt.want)
 		}
+	}
+}
+
+func TestToInt_Large(t *testing.T) {
+	for _, in := range []interface{}{"12345678901234567890", 1.2345678901234567e19} {
+		b, ok := ToInt(in).(*big.Int)
+		if !ok {
+			t.Errorf("ToInt(%v) = %#v, want *big.Int", in, ToInt(in))
+			continue
+		}
+		if b.Cmp(big.NewInt(0)) <= 0 || len(b.String()) != 20 {
+			t.Errorf("ToInt(%v) = %s", in, b)
+		}
+	}
+	if got := ToInt(math.Inf(1)); got != math.Inf(1) {
+		t.Errorf("ToInt(+Inf) = %v, want unchanged", got)
+	}
+	if got := ToInt(-2.7); got != -2 {
+		t.Errorf("ToInt(-2.7) = %v, want -2", got)
+	}
+}
+
+func TestToFloat_BigInt(t *testing.T) {
+	b, _ := new(big.Int).SetString("12345678901234567890", 10)
+	if got := ToFloat(b); got != 1.2345678901234567e19 {
+		t.Errorf("ToFloat(big) = %v", got)
 	}
 }
