@@ -2,6 +2,8 @@ package source
 
 import (
 	"bufio"
+	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -34,14 +36,22 @@ func (s *NdjsonSource) Load() (interface{}, error) {
 	return records, nil
 }
 
-// Stream calls fn for each decoded record. fn returning an error stops iteration.
+// maxLine is the longest NDJSON line Stream accepts.
+const maxLine = 10 << 20
+
+// Stream calls fn for each decoded record. Blank and whitespace-only lines are
+// skipped. fn returning an error stops iteration and that error is returned.
 func (s *NdjsonSource) Stream(fn func(interface{}) error) error {
 	scanner := bufio.NewScanner(s.r())
-	scanner.Buffer(make([]byte, 1024*1024), 10*1024*1024) // up to 10 MB per line
+	scanner.Buffer(make([]byte, 1024*1024), maxLine)
 	lineNum := 0
 	for scanner.Scan() {
-		line := scanner.Bytes()
 		lineNum++
+		line := scanner.Bytes()
+		if lineNum == 1 {
+			line = trimBOM(line)
+		}
+		line = bytes.TrimSpace(line)
 		if len(line) == 0 {
 			continue
 		}
@@ -53,5 +63,11 @@ func (s *NdjsonSource) Stream(fn func(interface{}) error) error {
 			return err
 		}
 	}
-	return scanner.Err()
+	if err := scanner.Err(); err != nil {
+		if errors.Is(err, bufio.ErrTooLong) {
+			return fmt.Errorf("ndjson line %d: exceeds %d MB limit", lineNum+1, maxLine>>20)
+		}
+		return fmt.Errorf("reading ndjson: %w", err)
+	}
+	return nil
 }

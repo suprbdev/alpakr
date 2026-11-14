@@ -1,6 +1,7 @@
 package source
 
 import (
+	"bufio"
 	"strings"
 	"testing"
 )
@@ -134,5 +135,23 @@ func TestStdinSource_AutoDetect_LeadingWhitespace(t *testing.T) {
 	}
 	if m["x"] != 42 {
 		t.Errorf("x = %v, want 42", m["x"])
+	}
+}
+
+func TestStdinSource_AutoDetect_BOM(t *testing.T) {
+	s := &StdinSource{reader: strings.NewReader("\xEF\xBB\xBF{\"url\":\"a\\/b\"}")}
+	v, err := s.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if m, ok := v.(map[string]interface{}); !ok || m["url"] != "a/b" {
+		t.Errorf("got %#v, want url a/b (parsed as JSON)", v)
+	}
+}
+
+func TestDetectStdinFormat_SkipsBOM(t *testing.T) {
+	got, err := detectStdinFormat(bufio.NewReader(strings.NewReader("\xEF\xBB\xBF [1]")))
+	if err != nil || got != "json" {
+		t.Errorf("detectStdinFormat = %q, %v; want json", got, err)
 	}
 }

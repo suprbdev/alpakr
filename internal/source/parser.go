@@ -35,7 +35,14 @@ func parseYAML(data []byte) (interface{}, error) {
 	return normalizeYAML(v), nil
 }
 
+var utf8BOM = []byte{0xEF, 0xBB, 0xBF}
+
+func trimBOM(b []byte) []byte {
+	return bytes.TrimPrefix(b, utf8BOM)
+}
+
 func parse(data []byte, format string) (interface{}, error) {
+	data = trimBOM(data)
 	switch format {
 	case "yaml", "yml":
 		return parseYAML(data)

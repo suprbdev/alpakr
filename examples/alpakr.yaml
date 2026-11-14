@@ -55,6 +55,9 @@ source:
   # streams the file (or URL response body) line by line — no full file loaded
   # into memory. Suitable for gigabyte-scale log files or event streams. Each record is passed
   # directly to the handler (no 'each: true' needed — it is implied).
+  # Blank and whitespace-only lines (including CRLF line endings) are skipped.
+  # Each line may be up to 10 MB. A leading UTF-8 byte-order mark is ignored
+  # for every format.
   # format: json
 
   # method: HTTP method for URL sources — GET | POST | PUT | PATCH | DELETE etc.

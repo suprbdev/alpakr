@@ -69,3 +69,34 @@ func TestNdjsonSource_InvalidJSON(t *testing.T) {
 		t.Fatal("expected error for invalid JSON line")
 	}
 }
+
+func TestNdjsonSource_SkipsWhitespaceAndCRLFLines(t *testing.T) {
+	input := "\xEF\xBB\xBF{\"x\":1}\r\n   \r\n\t\n\r\n{\"x\":2}\r\n  {\"x\":3}  \n"
+	var got []interface{}
+	err := (&NdjsonSource{Reader: strings.NewReader(input)}).Stream(func(v interface{}) error {
+		got = append(got, v.(map[string]interface{})["x"])
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Stream: %v", err)
+	}
+	if len(got) != 3 || got[0] != 1 || got[1] != 2 || got[2] != 3 {
+		t.Errorf("got %v, want [1 2 3]", got)
+	}
+}
+
+func TestNdjsonSource_ErrorLineNumber(t *testing.T) {
+	input := "{\"x\":1}\n\n{bad}\n"
+	err := (&NdjsonSource{Reader: strings.NewReader(input)}).Stream(func(interface{}) error { return nil })
+	if err == nil || !strings.HasPrefix(err.Error(), "ndjson line 3:") {
+		t.Errorf("err = %v, want ndjson line 3 error", err)
+	}
+}
+
+func TestNdjsonSource_LineTooLong(t *testing.T) {
+	input := "{\"x\":1}\n{\"s\":\"" + strings.Repeat("a", maxLine) + "\"}\n"
+	err := (&NdjsonSource{Reader: strings.NewReader(input)}).Stream(func(interface{}) error { return nil })
+	if err == nil || !strings.Contains(err.Error(), "ndjson line 2: exceeds") {
+		t.Errorf("err = %v, want line-too-long error for line 2", err)
+	}
+}
