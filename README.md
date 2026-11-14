@@ -206,7 +206,7 @@ source:
     max_pages: 50         # default 1000; 0 = unlimited
 ```
 
-Pages are fetched lazily, so `--limit` stops further requests. Expressions also get `$response` (`url`, `status`, lower-cased `headers`) — e.g. `$response.headers.link` for Link-header pagination.
+Pages are fetched lazily, so `--limit` stops further requests. Configured headers are only sent to the first URL's origin, never to other hosts a `next` link names. Expressions also get `$response` (`url`, `status`, lower-cased `headers`) — e.g. `$response.headers.link` for Link-header pagination.
 
 ### CSV
 

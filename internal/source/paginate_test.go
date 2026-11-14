@@ -56,7 +56,7 @@ func ids(vs []interface{}) string {
 func TestPages_BodyLinkWithRecords(t *testing.T) {
 	var reqs int32
 	srv := pagedServer(t, 3, &reqs)
-	p, err := CompilePagination(".links.next", ".data")
+	p, err := CompilePagination(".links.next", ".data", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +69,7 @@ func TestPages_BodyLinkWithRecords(t *testing.T) {
 func TestPages_LinkHeader(t *testing.T) {
 	var reqs int32
 	srv := pagedServer(t, 2, &reqs)
-	p, err := CompilePagination(`$response.headers.link // "" | capture("<(?<u>[^>]+)>; rel=\"next\"").u // null`, ".data")
+	p, err := CompilePagination(`$response.headers.link // "" | capture("<(?<u>[^>]+)>; rel=\"next\"").u // null`, ".data", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +81,7 @@ func TestPages_LinkHeader(t *testing.T) {
 func TestPages_WholePageWithoutRecords(t *testing.T) {
 	var reqs int32
 	srv := pagedServer(t, 2, &reqs)
-	p, _ := CompilePagination(".links.next", "")
+	p, _ := CompilePagination(".links.next", "", nil)
 	got := collect(t, NewPages(URLSource{URL: srv.URL + "/items"}, "json", p, 0))
 	if len(got) != 2 {
 		t.Fatalf("got %d pages, want 2", len(got))
@@ -91,7 +91,7 @@ func TestPages_WholePageWithoutRecords(t *testing.T) {
 func TestPages_MaxPagesWarns(t *testing.T) {
 	var reqs int32
 	srv := pagedServer(t, 5, &reqs)
-	p, _ := CompilePagination(".links.next", ".data")
+	p, _ := CompilePagination(".links.next", ".data", nil)
 	ps := NewPages(URLSource{URL: srv.URL + "/items"}, "json", p, 2)
 	var warned string
 	ps.Warn = func(msg string) { warned = msg }
@@ -106,7 +106,7 @@ func TestPages_MaxPagesWarns(t *testing.T) {
 func TestPages_FetchesLazily(t *testing.T) {
 	var reqs int32
 	srv := pagedServer(t, 10, &reqs)
-	p, _ := CompilePagination(".links.next", ".data")
+	p, _ := CompilePagination(".links.next", ".data", nil)
 	ps := NewPages(URLSource{URL: srv.URL + "/items"}, "json", p, 0)
 	for i := 0; i < 3; i++ {
 		if _, _, err := ps.Next(); err != nil {
@@ -126,7 +126,7 @@ func TestPages_Errors(t *testing.T) {
 		"42":              "got number",
 		"true":            "got true",
 	} {
-		p, err := CompilePagination(next, ".data")
+		p, err := CompilePagination(next, ".data", nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -142,11 +142,11 @@ func TestPages_Errors(t *testing.T) {
 			t.Errorf("next %s: err = %v, want %q", next, gotErr, want)
 		}
 	}
-	p, _ := CompilePagination("null", ".links")
+	p, _ := CompilePagination("null", ".links", nil)
 	if _, _, err := NewPages(URLSource{URL: srv.URL + "/items"}, "json", p, 0).Next(); err == nil || !strings.Contains(err.Error(), "must produce an array") {
 		t.Errorf("non-array records: err = %v", err)
 	}
-	if _, err := CompilePagination(".[[[", ""); err == nil {
+	if _, err := CompilePagination(".[[[", "", nil); err == nil {
 		t.Error("expected compile error")
 	}
 }

@@ -708,3 +708,29 @@ func TestRunLimit_ParallelReportsFirstError(t *testing.T) {
 		t.Errorf("records past the limit should not fail the run: %v", err)
 	}
 }
+
+func TestRunLimit_ParallelIgnoresErrorsPastLimit(t *testing.T) {
+	c := cfg(map[string]config.HandlerConfig{
+		"root": {Each: true, Fields: fields("x", field(".x | ascii_upcase"))},
+	})
+	par, err := New(c, WithWorkers(4))
+	if err != nil {
+		t.Fatal(err)
+	}
+	items := make([]interface{}, 600)
+	for i := range items {
+		items[i] = map[string]interface{}{"x": "ok"}
+	}
+	items[5] = map[string]interface{}{"x": 2}
+	got, err := par.RunLimit("root", items, 2)
+	if err != nil || len(got.([]interface{})) != 2 {
+		t.Errorf("limit 2: got %v, %v; want 2 records and no error", got, err)
+	}
+	if _, err := par.RunLimit("root", items, 6); err == nil {
+		t.Error("limit 6 reaches the failing record and should error")
+	}
+	prefix, err := mustEngine(t, c).RunLimit("root", items, 0)
+	if err == nil || len(prefix.([]interface{})) != 5 {
+		t.Errorf("sequential error should return the 5-record prefix, got %d, %v", len(prefix.([]interface{})), err)
+	}
+}

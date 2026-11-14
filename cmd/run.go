@@ -92,13 +92,13 @@ func runRun(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("no source configured for handler %q; pipe data via stdin or pass --stdin", handlerName)
 	}
 	format := srcCfg.Format
-	if fromStdin && (!hasSource || (srcCfg.FormatDetected && format != "csv")) {
+	if fromStdin && srcCfg.FormatDetected && format != "csv" {
 		format = ""
 	}
 
 	live := &liveOutput{}
 	if srcCfg.Pagination != nil && !fromStdin {
-		pages, err := newPages(srcCfg)
+		pages, err := newPages(srcCfg, vars)
 		if err != nil {
 			return err
 		}
@@ -130,9 +130,9 @@ func urlSource(srcCfg config.SourceConfig) source.URLSource {
 	}
 }
 
-func newPages(srcCfg config.SourceConfig) (*source.Pages, error) {
+func newPages(srcCfg config.SourceConfig, vars map[string]interface{}) (*source.Pages, error) {
 	p := srcCfg.Pagination
-	compiled, err := source.CompilePagination(p.Next, p.Records)
+	compiled, err := source.CompilePagination(p.Next, p.Records, vars)
 	if err != nil {
 		return nil, err
 	}

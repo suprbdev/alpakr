@@ -167,8 +167,10 @@ source:
   # pagination: follow an API's next-page links. Only valid with 'url', and
   # pages must be json or yaml. Records are streamed one at a time (like
   # ndjson): each page is fetched only when the previous page's records have
-  # been processed, so --limit stops further requests. Later pages reuse the
-  # method, headers, body and timeout above.
+  # been processed, so --limit stops further requests (also with --workers).
+  # Later pages reuse the method, body and timeout above; headers are sent
+  # only to the first URL's scheme, host and port, so credentials such as
+  # Authorization never reach another origin a next link points to.
   #
   #   next:      (required) jq expression on each page → the next page's URL,
   #              absolute or relative to the current page; null, "" or false
@@ -179,7 +181,8 @@ source:
   #   max_pages: (optional) stop after this many pages, with a warning on
   #              stderr if more remain. Default: 1000. 0 = unlimited.
   #
-  # Both expressions also see $response: {url, status, headers} for the page,
+  # Both expressions can use vars ($name) and also see $response: {url,
+  # status, headers} for the page,
   # with lower-cased header names — e.g. for a Link header (GitHub style):
   #   next: '$response.headers.link // "" | capture("<(?<u>[^>]+)>; rel=\"next\"").u // null'
   #

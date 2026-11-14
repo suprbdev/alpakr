@@ -64,6 +64,7 @@ func streamParallel(eng *engine.Engine, handler string, limit int, w output.Writ
 	}()
 
 	enc, _ := w.(output.LineEncoder)
+	seqEng := eng.Sequential()
 	raw, _ := vals.(source.RawValues)
 
 	go func() {
@@ -88,7 +89,30 @@ func streamParallel(eng *engine.Engine, handler string, limit int, w output.Writ
 				return errStopped
 			}
 		}
+		// drain waits until the writer has consumed every dispatched batch,
+		// so a paginated source requests a page only when it is needed.
+		drain := func() error {
+			for i := 0; i < window; i++ {
+				select {
+				case slots <- struct{}{}:
+				case <-stop:
+					return errStopped
+				}
+			}
+			for i := 0; i < window; i++ {
+				<-slots
+			}
+			return nil
+		}
 		live.beforeInput = dispatch
+		if _, paged := vals.(*source.Pages); paged {
+			live.beforeInput = func() error {
+				if err := dispatch(); err != nil {
+					return err
+				}
+				return drain()
+			}
+		}
 		add := func(v interface{}) error {
 			batch = append(batch, v)
 			if len(batch) >= batchSize {
@@ -137,7 +161,7 @@ func streamParallel(eng *engine.Engine, handler string, limit int, w output.Writ
 					if !ok {
 						return
 					}
-					results <- batchResult{seq: b.seq, items: runBatch(eng, handler, enc, raw, b.records)}
+					results <- batchResult{seq: b.seq, items: runBatch(seqEng, handler, limit, enc, raw, b.records)}
 				case <-stop:
 					return
 				}
@@ -193,6 +217,10 @@ func streamParallel(eng *engine.Engine, handler string, limit int, w output.Writ
 		<-slots
 		for _, it := range items {
 			if it.err != nil {
+				prefix, _ := it.result.([]interface{})
+				if limit > 0 && written+len(prefix) >= limit {
+					return w.WriteOne(prefix[:limit-written])
+				}
 				return it.err
 			}
 			if it.result == nil {
@@ -231,8 +259,9 @@ var (
 )
 
 // runBatch decodes and transforms records in order, stopping at the first
-// error.
-func runBatch(eng *engine.Engine, handler string, enc output.LineEncoder, raw source.RawValues, records []interface{}) []streamItem {
+// error. Each record is limited to limit results, the most any single record
+// can contribute; the writer applies the exact remaining limit.
+func runBatch(eng *engine.Engine, handler string, limit int, enc output.LineEncoder, raw source.RawValues, records []interface{}) []streamItem {
 	items := make([]streamItem, 0, len(records))
 	for _, rec := range records {
 		var res interface{}
@@ -241,7 +270,7 @@ func runBatch(eng *engine.Engine, handler string, enc output.LineEncoder, raw so
 			rec, err = raw.Decode(r.data, r.pos)
 		}
 		if err == nil {
-			res, err = eng.Run(handler, rec)
+			res, err = eng.RunLimit(handler, rec, limit)
 		}
 		it := streamItem{result: res, err: err}
 		if err == nil && res != nil && enc != nil {

@@ -31,6 +31,14 @@ func WithVars(vars map[string]interface{}) Option {
 	return func(o *options) { o.vars = vars }
 }
 
+// Sequential returns a copy of e that processes records on the calling
+// goroutine only, for callers that parallelise across records themselves.
+func (e *Engine) Sequential() *Engine {
+	c := *e
+	c.workers = 0
+	return &c
+}
+
 // New compiles every handler in cfg. It fails if any jq expression is invalid
 // (including references to undefined variables) or any field references an
 // undefined handler.

@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -1114,5 +1115,207 @@ handlers:
 	}
 	if got := runWithArgs(t, "run", "-c", cfgFile, "--workers", "4", "--limit", "2000"); strings.Count(got, "\n") != 2000 || !strings.HasSuffix(got, "{\"id\":2000}\n") {
 		t.Errorf("limited output wrong: %d lines", strings.Count(got, "\n"))
+	}
+}
+
+func TestRun_WorkersLimitBeforeError(t *testing.T) {
+	var arr strings.Builder
+	arr.WriteString("[")
+	for i := 0; i < 600; i++ {
+		if i > 0 {
+			arr.WriteString(",")
+		}
+		if i == 5 {
+			arr.WriteString(`{"x":2}`)
+		} else {
+			arr.WriteString(`{"x":"ok"}`)
+		}
+	}
+	arr.WriteString("]")
+	arrFile := writeTemp(t, "data.json", arr.String())
+	cfgFile := writeTemp(t, "alpakr.yaml", `
+version: "1"
+source:
+  path: `+arrFile+`
+output:
+  format: ndjson
+handlers:
+  root:
+    each: true
+    fields:
+      x: ".x | ascii_upcase"
+`)
+	for _, w := range []string{"1", "4"} {
+		if got := runWithArgs(t, "run", "-c", cfgFile, "--limit", "2", "--workers", w); got != "{\"x\":\"OK\"}\n{\"x\":\"OK\"}\n" {
+			t.Errorf("batch workers %s: %q", w, got)
+		}
+	}
+
+	stream := writeTemp(t, "stream.ndjson", "[{\"x\":\"ok\"},{\"x\":\"ok\"},{\"x\":2}]\n[{\"x\":\"ok\"}]\n")
+	streamCfg := writeTemp(t, "stream.yaml", `
+version: "1"
+source:
+  path: `+stream+`
+output:
+  format: ndjson
+handlers:
+  root:
+    each: true
+    fields:
+      x: ".x | ascii_upcase"
+`)
+	for _, w := range []string{"1", "4"} {
+		if got := runWithArgs(t, "run", "-c", streamCfg, "--limit", "2", "--workers", w); got != "{\"x\":\"OK\"}\n{\"x\":\"OK\"}\n" {
+			t.Errorf("stream workers %s: %q", w, got)
+		}
+		if err := runWithArgsExpectError(t, "run", "-c", streamCfg, "--limit", "3", "--workers", w); !strings.Contains(err.Error(), "(2)") {
+			t.Errorf("stream workers %s limit 3: err = %v", w, err)
+		}
+	}
+}
+
+func TestStdin_ConfiguredFormatWithoutPath(t *testing.T) {
+	cfgFile := writeTemp(t, "alpakr.yaml", `
+version: "1"
+source:
+  format: csv
+  delimiter: ";"
+handlers:
+  root:
+    fields:
+      id: ".id"
+      name: ".name"
+`)
+	if got := runWithStdin(t, "id;name\n1;ann\n", "run", "-c", cfgFile, "--stdin"); got != "{\"id\":\"1\",\"name\":\"ann\"}\n" {
+		t.Errorf("output = %q", got)
+	}
+	if got := runWithStdin(t, "id;name\n2;bob\n", "run", "-c", cfgFile); got != "{\"id\":\"2\",\"name\":\"bob\"}\n" {
+		t.Errorf("piped without --stdin = %q", got)
+	}
+}
+
+func TestRun_TSVWithExplicitCSVFormat(t *testing.T) {
+	dataFile := writeTemp(t, "t.tsv", "id\tname\n1\tann\n")
+	cfgFile := writeTemp(t, "alpakr.yaml", `
+version: "1"
+source:
+  path: `+dataFile+`
+  format: csv
+handlers:
+  root:
+    fields:
+      name: ".name"
+`)
+	if got := runWithArgs(t, "run", "-c", cfgFile); got != "{\"name\":\"ann\"}\n" {
+		t.Errorf("output = %q", got)
+	}
+}
+
+func TestRun_PaginationStaysLazyWithWorkers(t *testing.T) {
+	var requests int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&requests, 1)
+		var page int
+		_, _ = fmt.Sscanf(r.URL.Query().Get("p"), "%d", &page)
+		var items []string
+		for i := 0; i < 100; i++ {
+			items = append(items, fmt.Sprintf(`{"id":%d}`, page*100+i))
+		}
+		_, _ = fmt.Fprintf(w, `{"items":[%s],"next":"?p=%d"}`, strings.Join(items, ","), page+1)
+	}))
+	defer srv.Close()
+	cfgFile := writeTemp(t, "alpakr.yaml", `
+version: "1"
+source:
+  url: `+srv.URL+`/api?p=0
+  pagination:
+    next: ".next"
+    records: ".items"
+    max_pages: 30
+handlers:
+  root:
+    fields:
+      id: ".id"
+`)
+	for _, w := range []string{"1", "4"} {
+		atomic.StoreInt32(&requests, 0)
+		got := runWithArgs(t, "run", "-c", cfgFile, "--limit", "150", "--workers", w)
+		if strings.Count(got, "\n") != 150 {
+			t.Errorf("workers %s: %d lines", w, strings.Count(got, "\n"))
+		}
+		if n := atomic.LoadInt32(&requests); n != 2 {
+			t.Errorf("workers %s: %d page requests for 150 records, want 2", w, n)
+		}
+	}
+}
+
+func TestRun_PaginationHeadersSameOriginOnly(t *testing.T) {
+	var otherAuth atomic.Value
+	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		otherAuth.Store(r.Header.Get("Authorization"))
+		_, _ = io.WriteString(w, `{"items":[{"id":2}],"next":null}`)
+	}))
+	defer other.Close()
+	var firstAuth atomic.Value
+	first := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		firstAuth.Store(r.Header.Get("Authorization"))
+		_, _ = fmt.Fprintf(w, `{"items":[{"id":1}],"next":%q}`, other.URL+"/x")
+	}))
+	defer first.Close()
+	cfgFile := writeTemp(t, "alpakr.yaml", `
+version: "1"
+vars:
+  key: items
+source:
+  url: `+first.URL+`/api
+  headers:
+    Authorization: Bearer SECRET
+  pagination:
+    next: ".next"
+    records: ".[$key]"
+handlers:
+  root:
+    fields:
+      id: ".id"
+`)
+	if got := runWithArgs(t, "run", "-c", cfgFile); got != "{\"id\":1}\n{\"id\":2}\n" {
+		t.Errorf("output = %q", got)
+	}
+	if v, _ := firstAuth.Load().(string); v != "Bearer SECRET" {
+		t.Errorf("first origin auth = %q", v)
+	}
+	if v, _ := otherAuth.Load().(string); v != "" {
+		t.Errorf("credentials leaked to another origin: %q", v)
+	}
+}
+
+func TestRun_PaginationLoopAfterLimitIsFine(t *testing.T) {
+	var srvURL string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/a" {
+			_, _ = io.WriteString(w, `{"items":[{"id":1},{"id":2}],"next":"/b"}`)
+			return
+		}
+		_, _ = fmt.Fprintf(w, `{"items":[{"id":3},{"id":4}],"next":%q}`, srvURL+"/a")
+	}))
+	defer srv.Close()
+	srvURL = srv.URL
+	cfgFile := writeTemp(t, "alpakr.yaml", `
+version: "1"
+source:
+  url: `+srv.URL+`/a
+  pagination:
+    next: ".next"
+    records: ".items"
+handlers:
+  root:
+    fields:
+      id: ".id"
+`)
+	if got := runWithArgs(t, "run", "-c", cfgFile, "--limit", "3"); strings.Count(got, "\n") != 3 {
+		t.Errorf("limit within fetched pages: %q", got)
+	}
+	if err := runWithArgsExpectError(t, "run", "-c", cfgFile); !strings.Contains(err.Error(), "pagination loop") {
+		t.Errorf("err = %v", err)
 	}
 }

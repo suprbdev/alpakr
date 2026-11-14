@@ -19,7 +19,8 @@ func (e *Engine) Run(handlerName string, data interface{}) (interface{}, error) 
 
 // RunLimit is like Run, but an 'each' handler stops once limit records have
 // been produced (limit <= 0 means no limit), and its records are spread over
-// the engine's workers (see WithWorkers).
+// the engine's workers (see WithWorkers). When a record of an 'each' handler
+// fails, the records produced before it are returned along with the error.
 func (e *Engine) RunLimit(handlerName string, data interface{}, limit int) (interface{}, error) {
 	h, ok := e.handlers[handlerName]
 	if !ok {
@@ -101,7 +102,7 @@ func (h *compiledHandler) runItems(items []interface{}, limit, depth int) (inter
 	for _, item := range items {
 		out, err := h.runOne(item, depth)
 		if err != nil {
-			return nil, err
+			return results, err
 		}
 		if out != nil {
 			results = append(results, out)
