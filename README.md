@@ -30,7 +30,7 @@ alpakr run | jq .                      # pipe output to other tools
 cat data.json | alpakr run             # pipe JSON/YAML via stdin when no source is configured — format auto-detected
 cat access.ndjson | alpakr run         # several JSON values / YAML docs on stdin — streamed record by record
 jq '.items[]' big.json | alpakr run    # jq output works too (pretty-printed values are fine)
-cat other.json | alpakr run --stdin    # read stdin instead of the configured source
+cat other.json | alpakr run --stdin    # read stdin instead of the configured source (format sniffed unless set)
 alpakr run --limit 10                  # process only the first 10 records
 
 alpakr --version                       # print the build version

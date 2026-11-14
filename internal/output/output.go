@@ -62,3 +62,17 @@ func (w *NDJSONWriter) Write(v interface{}) error {
 	}
 	return w.WriteOne(v)
 }
+
+// WriteOne writes a streamed record: an array result (from an 'each'
+// handler) is written one element per line, like Write.
+func (w *NDJSONWriter) WriteOne(v interface{}) error {
+	if a, ok := v.([]interface{}); ok {
+		for _, e := range a {
+			if err := w.JSONWriter.WriteOne(e); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	return w.JSONWriter.WriteOne(v)
+}

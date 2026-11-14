@@ -17,19 +17,54 @@ import (
 // keeps timestamps as their source text, stringifies non-string keys and
 // rejects keys that collide once stringified.
 type yamlConverter struct {
-	anchors map[*yaml.Node]interface{}
+	anchors map[*yaml.Node]anchorValue
 	active  map[*yaml.Node]bool
+	// nodes counts the document as if every alias were expanded in place,
+	// which is how jq and the output writers will traverse it.
+	nodes    int
+	maxNodes int
 }
 
+// anchorValue is a converted anchored node and the expanded node count it
+// contributes each time it is referenced.
+type anchorValue struct {
+	v     interface{}
+	nodes int
+}
+
+// Aliases may expand a document to at most maxExpansion times its own node
+// count, or minExpandedNodes nodes if that is larger; beyond that it is
+// treated as an alias bomb.
+const (
+	maxExpansion     = 50
+	minExpandedNodes = 1_000_000
+)
+
 func yamlToValue(doc *yaml.Node) (interface{}, error) {
-	c := &yamlConverter{anchors: map[*yaml.Node]interface{}{}, active: map[*yaml.Node]bool{}}
+	c := &yamlConverter{
+		anchors:  map[*yaml.Node]anchorValue{},
+		active:   map[*yaml.Node]bool{},
+		maxNodes: max(minExpandedNodes, maxExpansion*countNodes(doc)),
+	}
 	return c.value(doc)
 }
 
+// countNodes counts the nodes physically present, not following aliases.
+func countNodes(n *yaml.Node) int {
+	total := 1
+	for _, c := range n.Content {
+		total += countNodes(c)
+	}
+	return total
+}
+
 func (c *yamlConverter) value(n *yaml.Node) (interface{}, error) {
+	startNodes := c.nodes
+	c.nodes++
 	if n.Anchor != "" {
-		if v, ok := c.anchors[n]; ok {
-			return v, nil
+		if a, ok := c.anchors[n]; ok {
+			c.nodes += a.nodes - 1
+			return a.v, c.checkExpansion(n)
 		}
 		if c.active[n] {
 			return nil, fmt.Errorf("line %d: anchor %q refers to itself", n.Line, n.Anchor)
@@ -63,9 +98,16 @@ func (c *yamlConverter) value(n *yaml.Node) (interface{}, error) {
 		return nil, err
 	}
 	if n.Anchor != "" {
-		c.anchors[n] = v
+		c.anchors[n] = anchorValue{v: v, nodes: c.nodes - startNodes}
 	}
 	return v, nil
+}
+
+func (c *yamlConverter) checkExpansion(n *yaml.Node) error {
+	if c.nodes > c.maxNodes {
+		return fmt.Errorf("line %d: document contains excessive aliasing (expands to more than %d nodes)", n.Line, c.maxNodes)
+	}
+	return nil
 }
 
 func (c *yamlConverter) sequence(n *yaml.Node) (interface{}, error) {

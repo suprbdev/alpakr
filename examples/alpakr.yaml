@@ -56,6 +56,8 @@ version: "1"
 #     use strptime/fromdate in jq to parse them
 #   - YAML map keys that are not strings (1:, true:) become string keys ("1", "true");
 #     keys that collide once stringified (1: and 1.0:) are an error
+#   - YAML anchors/aliases may expand a document to at most 50x its size (or
+#     1,000,000 nodes); beyond that it is rejected as excessive aliasing
 #   - Numbers beyond the float64 range (1e400) are clamped to ±1.7976931348623157e+308;
 #     JSON output writes NaN as null and ±infinity as ±1.7976931348623157e+308, like jq
 #
@@ -65,8 +67,8 @@ version: "1"
 # `while read` loop never swallows stdin by accident.
 #   - No source configured: format is auto-detected from the first byte:
 #     '{' or '[' → json; anything else → yaml.
-#   - --stdin with a source configured: stdin is read in that source's format
-#     (explicit 'format:' or the one detected from its path).
+#   - --stdin with a source configured: stdin is read in that source's
+#     explicit 'format:' if it has one, otherwise auto-detected as above.
 # Usage: cat data.json | alpakr run -c config.yaml           (no source block)
 #        cat other.json | alpakr run -c config.yaml --stdin   (override source)
 #

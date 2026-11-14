@@ -34,18 +34,21 @@ func NewValues(r io.Reader, format string) (Values, error) {
 			return nil, err
 		}
 	}
+	var in io.Reader = br
 	if format == "" {
-		format = detectFormat(br)
+		var ws []byte
+		format, ws = detectFormat(br)
+		in = io.MultiReader(bytes.NewReader(ws), br)
 	}
 	switch format {
 	case "json":
-		dec := json.NewDecoder(br)
+		dec := json.NewDecoder(in)
 		dec.UseNumber()
 		return &jsonValues{dec: dec}, nil
 	case "yaml", "yml":
-		return &yamlValues{dec: yaml.NewDecoder(br)}, nil
+		return &yamlValues{dec: yaml.NewDecoder(in)}, nil
 	case "ndjson":
-		sc := bufio.NewScanner(br)
+		sc := bufio.NewScanner(in)
 		sc.Buffer(make([]byte, 64*1024), maxLine)
 		return &ndjsonValues{sc: sc}, nil
 	}
@@ -54,22 +57,27 @@ func NewValues(r io.Reader, format string) (Values, error) {
 
 var utf8BOM = []byte{0xEF, 0xBB, 0xBF}
 
-// detectFormat peeks at the first non-whitespace byte: '{' or '[' → json,
-// anything else (including empty input) → yaml.
-func detectFormat(br *bufio.Reader) string {
-	for n := 1; ; n++ {
-		b, err := br.Peek(n)
+// detectFormat reads past leading whitespace to the first other byte: '{' or
+// '[' → json, anything else (including empty input) → yaml. The whitespace
+// consumed is returned so the caller can replay it; YAML indentation on the
+// first line is significant.
+func detectFormat(br *bufio.Reader) (string, []byte) {
+	var ws []byte
+	for {
+		c, err := br.ReadByte()
 		if err != nil {
-			return "yaml"
+			return "yaml", ws
 		}
-		switch c := b[n-1]; c {
+		switch c {
 		case ' ', '\t', '\r', '\n':
+			ws = append(ws, c)
 			continue
-		case '{', '[':
-			return "json"
-		default:
-			return "yaml"
 		}
+		_ = br.UnreadByte()
+		if c == '{' || c == '[' {
+			return "json", ws
+		}
+		return "yaml", ws
 	}
 }
 

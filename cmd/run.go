@@ -79,7 +79,7 @@ func runRun(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("no source configured for handler %q; pipe data via stdin or pass --stdin", handlerName)
 	}
 	format := srcCfg.Format
-	if fromStdin && !hasSource {
+	if fromStdin && (!hasSource || srcCfg.FormatDetected) {
 		format = ""
 	}
 
@@ -141,8 +141,11 @@ func process(cfg *config.Config, eng *engine.Engine, in io.Reader, format string
 		return err
 	}
 	first, ok, err := vals.Next()
-	if err != nil || !ok {
+	if err != nil {
 		return err
+	}
+	if !ok {
+		return writeOutput(cfg, nil, func(output.Writer) error { return nil })
 	}
 
 	var second interface{}
@@ -166,14 +169,22 @@ func process(cfg *config.Config, eng *engine.Engine, in io.Reader, format string
 	return writeOutput(cfg, fr, func(w output.Writer) error {
 		written := 0
 		emit := func(record interface{}) error {
-			result, err := eng.Run(handlerName, record)
+			remaining := 0
+			if limitRecords > 0 {
+				remaining = limitRecords - written
+			}
+			result, err := eng.RunLimit(handlerName, record, remaining)
 			if err != nil || result == nil {
 				return err
 			}
 			if err := w.WriteOne(result); err != nil {
 				return err
 			}
-			written++
+			if a, ok := result.([]interface{}); ok {
+				written += len(a)
+			} else {
+				written++
+			}
 			if limitRecords > 0 && written >= limitRecords {
 				return errLimitReached
 			}

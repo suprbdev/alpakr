@@ -573,3 +573,38 @@ func TestFields_NullValue(t *testing.T) {
 		t.Errorf("err = %v", err)
 	}
 }
+
+func TestFieldConfig_Aliases(t *testing.T) {
+	cfg := mustLoad(t, `
+version: "1"
+handlers:
+  inner:
+    fields:
+      x: &sel ".x"
+  root:
+    fields:
+      a:
+        handler: &h inner
+        input: &in ".sub"
+      b:
+        handler: *h
+        input: *in
+      c: *sel
+      d:
+        input: *in
+        fields: &fs
+          y: ".y"
+      e:
+        fields: *fs
+`)
+	root := cfg.Handlers["root"].Fields
+	if b := mustField(t, root, "b"); b.Handler != "inner" || b.Input != ".sub" {
+		t.Errorf("b = %+v", b)
+	}
+	if c := mustField(t, root, "c"); c.Expr != ".x" {
+		t.Errorf("c = %+v", c)
+	}
+	if e := mustField(t, root, "e"); len(e.Fields) != 1 || e.Fields[0].Name != "y" {
+		t.Errorf("e = %+v", e)
+	}
+}
