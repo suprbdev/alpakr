@@ -80,6 +80,17 @@ handlers:
       country: ".country_code | ascii_upcase"
 ```
 
+### Environment variables
+
+Source settings (`path`, `url`, `method`, header values, `body`, `timeout`) and `output.file` expand `${VAR}` and `${VAR:-default}`; an unset `${VAR}` without a default is an error, and `$$` is a literal `$`. jq expressions can read `$ENV.VAR` / `env.VAR`.
+
+```yaml
+source:
+  url: https://${API_HOST:-api.example.com}/v1/items
+  headers:
+    Authorization: "Bearer ${API_TOKEN}"
+```
+
 ### Multiple sources
 
 Use a `sources` map and assign each handler a `source:` key. Handlers with different sources can coexist in one config file — each `alpakr run --handler <name>` loads only that handler's source.
