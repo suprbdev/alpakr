@@ -586,3 +586,35 @@ func TestRun_JQEnvironment(t *testing.T) {
 		t.Errorf("got %#v, want %#v", got, want)
 	}
 }
+
+func TestRun_EachOnNullIsEmpty(t *testing.T) {
+	e := mustEngine(t, cfg(map[string]config.HandlerConfig{
+		"root": {Fields: fields("tags", subHandler("tag", ".tags"))},
+		"tag":  {Each: true, Fields: fields("t", field("."))},
+	}))
+	for _, in := range []interface{}{
+		map[string]interface{}{"tags": nil},
+		map[string]interface{}{},
+	} {
+		got, err := runPlain(e, "root", in)
+		if err != nil {
+			t.Fatalf("%v: %v", in, err)
+		}
+		want := map[string]interface{}{"tags": []interface{}{}}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("%v: got %#v, want %#v", in, got, want)
+		}
+	}
+}
+
+func TestRun_EachOnNonArrayNamesJQType(t *testing.T) {
+	e := mustEngine(t, cfg(map[string]config.HandlerConfig{
+		"root": {Each: true, Fields: fields("x", field("."))},
+	}))
+	for in, want := range map[string]interface{}{"object": map[string]interface{}{}, "string": "s", "number": 1.5, "boolean": true} {
+		_, err := e.Run("root", want)
+		if err == nil || !strings.HasSuffix(err.Error(), "got "+in) {
+			t.Errorf("%s: err = %v", in, err)
+		}
+	}
+}

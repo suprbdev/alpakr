@@ -233,8 +233,9 @@ handlers:
     # When false (default), the input is treated as a single object and the
     # handler produces a single output object.
     #
-    # Error: if each is true but the input is not an array, alpakr exits with
-    # an error identifying the handler.
+    # A null or missing input (e.g. an optional array field) is treated as an
+    # empty array and produces []. Any other non-array input is an error
+    # identifying the handler and the type it got.
     #
     # Note: not used with ndjson sources — each line is already one record and
     # is passed to the handler individually by the streaming engine.
