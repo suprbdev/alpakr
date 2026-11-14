@@ -1,21 +1,21 @@
 package engine
 
 import (
-	"github.com/itchyny/gojq"
 	"github.com/suprbdev/alpakr/internal/config"
 )
 
+// Engine runs compiled handler pipelines. It is safe for sequential reuse
+// across many records.
 type Engine struct {
-	cfg    *config.Config
-	codes  *compiledCodes
-	fnOpts []gojq.CompilerOption
+	handlers map[string]*compiledHandler
 }
 
+// New compiles every handler in cfg. It fails if any jq expression is invalid
+// or any field references an undefined handler.
 func New(cfg *config.Config) (*Engine, error) {
-	fnOpts := customFunctions()
-	codes, err := compileHandlers(cfg.Handlers, fnOpts)
+	handlers, err := compileHandlers(cfg.Handlers, customFunctions())
 	if err != nil {
 		return nil, err
 	}
-	return &Engine{cfg: cfg, codes: codes, fnOpts: fnOpts}, nil
+	return &Engine{handlers: handlers}, nil
 }
