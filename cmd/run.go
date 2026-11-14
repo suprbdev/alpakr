@@ -84,15 +84,11 @@ func runRun(_ *cobra.Command, _ []string) error {
 // runStream processes an NDJSON source one record at a time, writing each
 // result as soon as it is produced.
 func runStream(cfg *config.Config, eng *engine.Engine, srcCfg config.SourceConfig) (err error) {
-	var in io.Reader = os.Stdin
-	if !stdinIsPipe() {
-		f, openErr := os.Open(srcCfg.Path)
-		if openErr != nil {
-			return fmt.Errorf("opening ndjson file: %w", openErr)
-		}
-		defer f.Close()
-		in = f
+	in, err := openStream(srcCfg)
+	if err != nil {
+		return err
 	}
+	defer in.Close()
 
 	sink, err := openSink(cfg.Output.File)
 	if err != nil {
@@ -128,6 +124,22 @@ func runStream(cfg *config.Config, eng *engine.Engine, srcCfg config.SourceConfi
 		return nil
 	}
 	return err
+}
+
+// openStream returns the raw NDJSON input: piped stdin, the configured URL's
+// response body, or the configured file.
+func openStream(srcCfg config.SourceConfig) (io.ReadCloser, error) {
+	switch {
+	case stdinIsPipe():
+		return io.NopCloser(os.Stdin), nil
+	case srcCfg.URL != "":
+		return (&source.URLSource{URL: srcCfg.URL, Method: srcCfg.Method, Headers: srcCfg.Headers, Body: srcCfg.Body}).Open()
+	}
+	f, err := os.Open(srcCfg.Path)
+	if err != nil {
+		return nil, fmt.Errorf("opening ndjson file: %w", err)
+	}
+	return f, nil
 }
 
 // runBatch loads the full source, runs the handler once and writes the result.

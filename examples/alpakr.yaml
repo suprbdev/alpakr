@@ -4,7 +4,8 @@
 # it is a complete reference for all supported configuration.
 # =============================================================================
 
-# version: config schema version. Currently only "1" is valid.
+# version: config schema version. Currently only "1" is valid; any other value
+# is an error. Optional — omitting it is treated as "1".
 version: "1"
 
 
@@ -17,10 +18,11 @@ version: "1"
 #
 # Rules:
 #   - 'path' and 'url' are mutually exclusive — specify exactly one
-#   - 'format' is optional — auto-detected from the file extension or URL path:
-#       .json          → json
-#       .yaml / .yml   → yaml
-#       .ndjson        → ndjson
+#   - 'format' is optional — auto-detected from the file extension or URL path
+#     (query string and fragment are ignored, so data.yaml?token=x → yaml):
+#       .json              → json
+#       .yaml / .yml       → yaml
+#       .ndjson / .jsonl   → ndjson
 #     If the extension is absent or unrecognised, defaults to json
 #
 # Stdin piping: if data is piped via stdin, the 'source' config is optional —
@@ -37,14 +39,15 @@ source:
   # url: https://example.com/api/records.json
 
   # format: explicitly set the input format — json | yaml | ndjson
+  # (yml is an alias for yaml). Any other value is an error.
   # Optional. Auto-detected from file extension if omitted (.json → json,
-  # .yaml/.yml → yaml, .ndjson → ndjson).
+  # .yaml/.yml → yaml, .ndjson/.jsonl → ndjson).
   # Stdin: format auto-detected by peeking first byte ('{' or '[' → json,
   # else → yaml). Set format explicitly to override, or to select ndjson.
   #
   # ndjson (newline-delimited JSON): each line is one JSON object. alpakr
-  # streams the file line by line — no full file loaded into memory. Suitable
-  # for gigabyte-scale log files or event streams. Each record is passed
+  # streams the file (or URL response body) line by line — no full file loaded
+  # into memory. Suitable for gigabyte-scale log files or event streams. Each record is passed
   # directly to the handler (no 'each: true' needed — it is implied).
   # format: json
 
@@ -72,6 +75,9 @@ source:
 #
 # If 'sources' is used, a top-level 'source' is not required, but both can
 # coexist — handlers without a 'source:' key fall back to the top-level source.
+# Only entry-point handlers (the one passed to --handler, or 'root') need a
+# source; sub-handlers referenced from fields receive data from their parent
+# and need no 'source:' key.
 #
 # sources:
 #   staff:

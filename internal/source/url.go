@@ -15,7 +15,9 @@ type URLSource struct {
 	Body    string
 }
 
-func (u *URLSource) Load() (interface{}, error) {
+// Open performs the HTTP request and returns the response body. The caller
+// must close it. Non-2xx responses are returned as errors.
+func (u *URLSource) Open() (io.ReadCloser, error) {
 	method := u.Method
 	if method == "" {
 		method = http.MethodGet
@@ -39,13 +41,22 @@ func (u *URLSource) Load() (interface{}, error) {
 	if err != nil {
 		return nil, fmt.Errorf("fetching %q: %w", u.URL, err)
 	}
-	defer resp.Body.Close()
-
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		resp.Body.Close()
 		return nil, fmt.Errorf("fetching %q: HTTP %d", u.URL, resp.StatusCode)
 	}
+	return resp.Body, nil
+}
 
-	data, err := io.ReadAll(resp.Body)
+// Load fetches the URL and parses the response body according to Format.
+func (u *URLSource) Load() (interface{}, error) {
+	body, err := u.Open()
+	if err != nil {
+		return nil, err
+	}
+	defer body.Close()
+
+	data, err := io.ReadAll(body)
 	if err != nil {
 		return nil, fmt.Errorf("reading response from %q: %w", u.URL, err)
 	}
