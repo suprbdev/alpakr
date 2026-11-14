@@ -37,17 +37,6 @@ func TestParseJSON_NestedNumbers(t *testing.T) {
 	}
 }
 
-func TestParseJSON_TrailingData(t *testing.T) {
-	for _, in := range []string{`{"a":1} {"a":2}`, `{"a":1}}`, `[1] x`} {
-		if _, err := parse([]byte(in), "json"); err == nil {
-			t.Errorf("parse(%q): expected error for trailing data", in)
-		}
-	}
-	if _, err := parse([]byte("{\"a\":1}\n\t "), "json"); err != nil {
-		t.Errorf("trailing whitespace should be accepted: %v", err)
-	}
-}
-
 func TestParseYAML_Timestamps(t *testing.T) {
 	v, err := parse([]byte("d: 2024-01-01\nt: 2024-01-01T10:30:00Z\nx: !!timestamp 2001-12-14\nq: \"2024-02-02\"\n"), "yaml")
 	if err != nil {

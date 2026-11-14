@@ -72,6 +72,7 @@ func resetFlags(args []string) {
 	limitRecords = 0
 	outputFormat = ""
 	outputFile = ""
+	readStdin = false
 	for _, c := range rootCmd.Commands() {
 		c.SilenceUsage = false
 	}
@@ -545,5 +546,153 @@ handlers:
 	}
 	if got := runWithArgs(t, "run", "-c", cfgFile, "-f", "YAML"); got != "id: 1\n" {
 		t.Errorf("-f YAML output = %q", got)
+	}
+}
+
+// runWithStdin runs the command with stdin replaced by a pipe carrying input.
+func runWithStdin(t *testing.T, input string, args ...string) string {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := os.Stdin
+	os.Stdin = r
+	defer func() {
+		os.Stdin = old
+		_ = r.Close()
+	}()
+	go func() {
+		_, _ = io.WriteString(w, input)
+		_ = w.Close()
+	}()
+	return runWithArgs(t, args...)
+}
+
+const stdinOnlyConfig = `
+version: "1"
+output:
+  indent: 0
+handlers:
+  root:
+    fields:
+      id: ".id"
+`
+
+func TestStdin_ConfiguredSourceWinsOverPipe(t *testing.T) {
+	dataFile := writeTemp(t, "data.json", `{"id":"from-file"}`)
+	cfgFile := writeTemp(t, "alpakr.yaml", `
+version: "1"
+source:
+  path: `+dataFile+`
+output:
+  indent: 0
+handlers:
+  root:
+    fields:
+      id: ".id"
+`)
+	if got := runWithStdin(t, `{"id":"from-stdin"}`, "run", "-c", cfgFile); got != `{"id":"from-file"}`+"\n" {
+		t.Errorf("piped stdin replaced configured source: %q", got)
+	}
+	if got := runWithStdin(t, `{"id":"from-stdin"}`, "run", "-c", cfgFile, "--stdin"); got != `{"id":"from-stdin"}`+"\n" {
+		t.Errorf("--stdin should read stdin: %q", got)
+	}
+}
+
+func TestStdin_FlagUsesConfiguredFormat(t *testing.T) {
+	dataFile := writeTemp(t, "events.ndjson", "")
+	cfgFile := writeTemp(t, "alpakr.yaml", `
+version: "1"
+source:
+  path: `+dataFile+`
+handlers:
+  root:
+    fields:
+      id: ".id"
+`)
+	if got := runWithStdin(t, "{\"id\":1}\n\n{\"id\":2}\n", "run", "-c", cfgFile, "--stdin"); got != "{\"id\":1}\n{\"id\":2}\n" {
+		t.Errorf("output = %q", got)
+	}
+}
+
+func TestStdin_AutoDetectStreams(t *testing.T) {
+	cfgFile := writeTemp(t, "alpakr.yaml", stdinOnlyConfig)
+	for name, in := range map[string]string{
+		"ndjson":      "{\"id\":1}\n{\"id\":2}\n",
+		"jq output":   "{\n  \"id\": 1\n}\n{\n  \"id\": 2\n}\n",
+		"yaml stream": "id: 1\n---\nid: 2\n",
+	} {
+		if got := runWithStdin(t, in, "run", "-c", cfgFile); got != "{\"id\":1}\n{\"id\":2}\n" {
+			t.Errorf("%s: output = %q", name, got)
+		}
+	}
+}
+
+func TestStdin_SingleDocumentIsBatch(t *testing.T) {
+	cfgFile := writeTemp(t, "alpakr.yaml", `
+version: "1"
+handlers:
+  root:
+    fields:
+      id: ".id"
+`)
+	if got := runWithStdin(t, `{"id": 1}`, "run", "-c", cfgFile); got != "{\n  \"id\": 1\n}\n" {
+		t.Errorf("output = %q, want indented single document", got)
+	}
+}
+
+func TestStdin_StreamKeepsNullRecords(t *testing.T) {
+	cfgFile := writeTemp(t, "alpakr.yaml", `
+version: "1"
+handlers:
+  root:
+    fields:
+      v: "."
+`)
+	if got := runWithStdin(t, "[1] null [3]", "run", "-c", cfgFile); got != "{\"v\":[1]}\n{\"v\":null}\n{\"v\":[3]}\n" {
+		t.Errorf("output = %q", got)
+	}
+}
+
+func TestStdin_StreamLimit(t *testing.T) {
+	cfgFile := writeTemp(t, "alpakr.yaml", stdinOnlyConfig)
+	if got := runWithStdin(t, "{\"id\":1}\n{\"id\":2}\n{\"id\":3}\n", "run", "-c", cfgFile, "--limit", "2"); got != "{\"id\":1}\n{\"id\":2}\n" {
+		t.Errorf("output = %q", got)
+	}
+}
+
+func TestRun_MultiValueJSONFileStreams(t *testing.T) {
+	dataFile := writeTemp(t, "data.json", "{\"id\":1}\n{\"id\":2}\n")
+	cfgFile := writeTemp(t, "alpakr.yaml", `
+version: "1"
+source:
+  path: `+dataFile+`
+handlers:
+  root:
+    fields:
+      id: ".id"
+`)
+	if got := runWithArgs(t, "run", "-c", cfgFile); got != "{\"id\":1}\n{\"id\":2}\n" {
+		t.Errorf("output = %q", got)
+	}
+}
+
+func TestRun_BatchMayOverwriteItsInput(t *testing.T) {
+	dataFile := writeTemp(t, "data.json", `{"id":1,"x":2}`)
+	cfgFile := writeTemp(t, "alpakr.yaml", `
+version: "1"
+source:
+  path: `+dataFile+`
+output:
+  indent: 0
+handlers:
+  root:
+    fields:
+      id: ".id"
+`)
+	runWithArgs(t, "run", "-c", cfgFile, "-o", dataFile)
+	if got, _ := os.ReadFile(dataFile); string(got) != `{"id":1}`+"\n" {
+		t.Errorf("in-place batch output = %q", got)
 	}
 }

@@ -34,12 +34,22 @@ version: "1"
 #   - Numbers beyond the float64 range (1e400) are clamped to ±1.7976931348623157e+308;
 #     JSON output writes NaN as null and ±infinity as ±1.7976931348623157e+308, like jq
 #
-# Stdin piping: if data is piped via stdin, the 'source' config is optional —
-# you can omit the source block entirely. Format is auto-detected by peeking
-# at the first byte: '{' or '[' → json; anything else → yaml. Set 'format:'
-# explicitly to override auto-detection, or to select ndjson streaming.
-# Usage: cat data.json | alpakr run -c config.yaml   (no source block needed)
-#        cat large.ndjson | alpakr run -c config.yaml
+# Stdin: piped stdin is read only when the handler has no configured source
+# (omit the source block entirely), or when --stdin is passed. A configured
+# source always wins otherwise, so running alpakr inside a pipeline, CI job or
+# `while read` loop never swallows stdin by accident.
+#   - No source configured: format is auto-detected from the first byte:
+#     '{' or '[' → json; anything else → yaml.
+#   - --stdin with a source configured: stdin is read in that source's format
+#     (explicit 'format:' or the one detected from its path).
+# Usage: cat data.json | alpakr run -c config.yaml           (no source block)
+#        cat other.json | alpakr run -c config.yaml --stdin   (override source)
+#
+# Multiple values: a json or yaml input holding several top-level values —
+# NDJSON, concatenated or pretty-printed JSON objects (e.g. jq output), or
+# YAML documents separated by '---' — is streamed record by record exactly
+# like ndjson. A single value or document is transformed as a whole.
+# Usage: jq '.items[]' big.json | alpakr run -c config.yaml
 source:
   # path: local file path, relative to this config file's directory
   path: ./data/records.json
@@ -51,8 +61,10 @@ source:
   # (yml is an alias for yaml; case-insensitive). Any other value is an error.
   # Optional. Auto-detected from file extension if omitted (.json → json,
   # .yaml/.yml → yaml, .ndjson/.jsonl → ndjson).
-  # Stdin: format auto-detected by peeking first byte ('{' or '[' → json,
-  # else → yaml). Set format explicitly to override, or to select ndjson.
+  # Stdin without a configured source: auto-detected by peeking the first byte
+  # ('{' or '[' → json, else → yaml); several values are streamed (see above).
+  # ndjson differs from multi-value json in that each record is emitted
+  # immediately, without first looking ahead for a second value.
   #
   # ndjson (newline-delimited JSON): each line is one JSON object. alpakr
   # streams the file (or URL response body) line by line — no full file loaded

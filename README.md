@@ -26,8 +26,10 @@ alpakr validate                        # check config + compile all expressions
 alpakr list-handlers                   # print handler names defined in config
 
 alpakr run | jq .                      # pipe output to other tools
-cat data.json | alpakr run             # pipe JSON/YAML via stdin — format auto-detected, no source config needed
-cat access.ndjson | alpakr run         # ndjson stdin — streams line by line, no full file in memory
+cat data.json | alpakr run             # pipe JSON/YAML via stdin when no source is configured — format auto-detected
+cat access.ndjson | alpakr run         # several JSON values / YAML docs on stdin — streamed record by record
+jq '.items[]' big.json | alpakr run    # jq output works too (pretty-printed values are fine)
+cat other.json | alpakr run --stdin    # read stdin instead of the configured source
 alpakr run --limit 10                  # process only the first 10 records
 
 alpakr --version                       # print the build version
@@ -44,8 +46,8 @@ source:
   path: ./data/records.json   # local file — mutually exclusive with url:
   # url: https://example.com/data.json
   # format: json              # json | yaml | ndjson — auto-detected from file/URL extension (.jsonl → ndjson)
-                              # stdin: format auto-detected by peeking first byte ({ or [ → json, else yaml)
-                              # omit source entirely when piping via stdin
+                              # stdin is read only when no source is configured, or with --stdin
+                              # stdin format auto-detected by peeking first byte ({ or [ → json, else yaml)
   # method: POST              # HTTP method (default: GET). POST/PUT/PATCH required when body is set.
   # headers:
   #   Authorization: "Bearer <token>"
@@ -144,7 +146,9 @@ handlers:
       status: ".status"
 ```
 
-With JSON output, each record is written as one compact line (NDJSON) and `indent` is ignored; with YAML output, records form a `---`-separated multi-document stream. Pipe via stdin works the same way — `cat large.ndjson | alpakr run` streams without buffering, and output is flushed whenever alpakr waits for more input, so `tail -f app.log | alpakr run` emits records as they arrive.
+With JSON output, each record is written as one compact line (NDJSON) and `indent` is ignored; with YAML output, records form a `---`-separated multi-document stream. Pipe via stdin works the same way — `cat large.ndjson | alpakr run` streams without buffering, and output is flushed whenever alpakr waits for more input, so `tail -f app.log | alpakr run --stdin` (with a `format: ndjson` source) emits records as they arrive.
+
+Any JSON or YAML input holding more than one top-level value — NDJSON, concatenated or pretty-printed JSON objects such as `jq` output, or `---`-separated YAML documents — is streamed the same way, from a file, URL or stdin. Without `format: ndjson`, alpakr reads one value ahead to tell a stream from a single document, so the first record is written once the second arrives.
 
 `--limit N` works with NDJSON sources and stops after N records have been written (filtered-out records don't count toward the limit).
 
