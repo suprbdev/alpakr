@@ -43,7 +43,7 @@ version: "1"
 source:
   path: ./data/records.json   # local file — mutually exclusive with url:
   # url: https://example.com/data.json
-  # format: json              # json | yaml | ndjson — auto-detected from file extension
+  # format: json              # json | yaml | ndjson — auto-detected from file/URL extension (.jsonl → ndjson)
                               # stdin: format auto-detected by peeking first byte ({ or [ → json, else yaml)
                               # omit source entirely when piping via stdin
   # method: POST              # HTTP method (default: GET). POST/PUT/PATCH required when body is set.
@@ -123,11 +123,11 @@ handlers:
       stock: ".qty"
 ```
 
-When no `root` handler is defined, `--handler` is required. The error message lists available handler names.
+When no `root` handler is defined, `--handler` is required. The error message lists available handler names. Sub-handlers referenced from fields don't need a `source:` — they receive data from their parent.
 
 ### NDJSON (streaming)
 
-Set `format: ndjson` to stream newline-delimited JSON files without loading the full file into memory. Each line is decoded, passed through the handler, and written to output immediately — suitable for gigabyte-scale log files or event streams.
+Set `format: ndjson` (auto-detected for `.ndjson` and `.jsonl`) to stream newline-delimited JSON files or URL responses without loading the full file into memory. Each line is decoded, passed through the handler, and written to output immediately — suitable for gigabyte-scale log files or event streams.
 
 ```yaml
 source:

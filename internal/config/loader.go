@@ -2,7 +2,9 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -29,7 +31,9 @@ func Load(path string) (*Config, error) {
 }
 
 func validate(cfg *Config, configPath string) error {
-	hasDefaultSource := cfg.Source.Path != "" || cfg.Source.URL != ""
+	if cfg.Version != "" && cfg.Version != "1" {
+		return fmt.Errorf("config: unsupported version %q (want \"1\")", cfg.Version)
+	}
 
 	// Source presence is not validated here — cmd/run.go enforces it at runtime
 	// because a piped stdin makes a source config optional.
@@ -61,9 +65,6 @@ func validate(cfg *Config, configPath string) error {
 			if _, ok := cfg.Sources[h.Source]; !ok {
 				return fmt.Errorf("config: handler %q references undefined source %q", name, h.Source)
 			}
-		} else if !hasDefaultSource && len(cfg.Sources) > 0 {
-			// Sources map exists but handler doesn't reference one and there's no default.
-			return fmt.Errorf("config: handler %q has no 'source' key and no default source is defined", name)
 		}
 		for fieldName, f := range h.Fields {
 			if f.Handler != "" {
@@ -95,6 +96,11 @@ func validate(cfg *Config, configPath string) error {
 func validateSourceConfig(label string, s SourceConfig) error {
 	if s.Path != "" && s.URL != "" {
 		return fmt.Errorf("config: %s cannot have both 'path' and 'url'", label)
+	}
+	switch s.Format {
+	case "", "json", "yaml", "yml", "ndjson":
+	default:
+		return fmt.Errorf("config: %s: unknown format %q (want json, yaml or ndjson)", label, s.Format)
 	}
 	if s.URL == "" {
 		if len(s.Headers) > 0 {
@@ -143,14 +149,17 @@ func detectFormat(s *SourceConfig) {
 	if s.Format != "" {
 		return
 	}
-	src := s.Path
-	if src == "" {
-		src = s.URL
+	ext := filepath.Ext(s.Path)
+	if s.URL != "" {
+		ext = path.Ext(s.URL)
+		if u, err := url.Parse(s.URL); err == nil {
+			ext = path.Ext(u.Path)
+		}
 	}
-	switch strings.ToLower(filepath.Ext(src)) {
+	switch strings.ToLower(ext) {
 	case ".yaml", ".yml":
 		s.Format = "yaml"
-	case ".ndjson":
+	case ".ndjson", ".jsonl":
 		s.Format = "ndjson"
 	default:
 		s.Format = "json"

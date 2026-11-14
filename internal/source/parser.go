@@ -1,6 +1,7 @@
 package source
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 
@@ -28,6 +29,8 @@ func parse(data []byte, format string) (interface{}, error) {
 	switch format {
 	case "yaml", "yml":
 		return parseYAML(data)
+	case "ndjson":
+		return (&NdjsonSource{Reader: bytes.NewReader(data)}).Load()
 	default:
 		return parseJSON(data)
 	}

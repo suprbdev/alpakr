@@ -380,3 +380,70 @@ handlers:
 		}
 	}
 }
+
+func TestLoadValidation_MultiSourceSubHandlerWithoutSource(t *testing.T) {
+	cfg := mustLoad(t, `
+version: "1"
+sources:
+  a:
+    path: /tmp/a.json
+handlers:
+  root:
+    source: a
+    fields:
+      loc:
+        handler: loc
+        input: ".loc"
+  loc:
+    fields:
+      city: ".city"
+`)
+	if got := cfg.SourceFor("root").Path; got != "/tmp/a.json" {
+		t.Errorf("root source path = %q, want /tmp/a.json", got)
+	}
+}
+
+func TestLoadValidation_Version(t *testing.T) {
+	for _, v := range []string{"", `version: "1"`} {
+		if _, err := loadString(t, v+"\nhandlers:\n  root:\n    fields:\n      id: \".id\"\n"); err != nil {
+			t.Errorf("%q: unexpected error: %v", v, err)
+		}
+	}
+	if _, err := loadString(t, "version: \"2\"\nhandlers:\n  root:\n    fields:\n      id: \".id\"\n"); err == nil {
+		t.Error("expected error for unsupported version")
+	}
+}
+
+func TestLoadValidation_UnknownSourceFormat(t *testing.T) {
+	for name, src := range map[string]string{
+		"source":  "source:\n  path: /tmp/x.csv\n  format: csv\n",
+		"sources": "sources:\n  a:\n    path: /tmp/x.csv\n    format: csv\n",
+	} {
+		_, err := loadString(t, "version: \"1\"\n"+src+"handlers:\n  root:\n    fields:\n      id: \".id\"\n")
+		if err == nil {
+			t.Errorf("%s: expected error for unknown format", name)
+		}
+	}
+}
+
+func TestDetectFormat(t *testing.T) {
+	for _, tc := range []struct {
+		src  SourceConfig
+		want string
+	}{
+		{SourceConfig{Path: "/data/x.JSON"}, "json"},
+		{SourceConfig{Path: "/data/x.yml"}, "yaml"},
+		{SourceConfig{Path: "/data/x.jsonl"}, "ndjson"},
+		{SourceConfig{Path: "/data/x"}, "json"},
+		{SourceConfig{URL: "https://example.com/data.yaml?token=abc"}, "yaml"},
+		{SourceConfig{URL: "https://example.com/events.ndjson#frag"}, "ndjson"},
+		{SourceConfig{URL: "https://example.com/api/records?format=.yaml"}, "json"},
+		{SourceConfig{Path: "/data/x.yaml", Format: "json"}, "json"},
+	} {
+		s := tc.src
+		detectFormat(&s)
+		if s.Format != tc.want {
+			t.Errorf("detectFormat(%+v) = %q, want %q", tc.src, s.Format, tc.want)
+		}
+	}
+}

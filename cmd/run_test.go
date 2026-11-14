@@ -4,6 +4,9 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -383,5 +386,54 @@ func TestFlushingReader_FlushesBeforeRead(t *testing.T) {
 	}
 	if out.String() != "pending" {
 		t.Errorf("buffered output not flushed before read: %q", out.String())
+	}
+}
+
+func TestRun_NdjsonURLSource(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, err := io.WriteString(w, "{\"id\":1}\n{\"id\":2}\n{\"id\":3}\n"); err != nil {
+			t.Error(err)
+		}
+	}))
+	defer srv.Close()
+
+	cfgFile := writeTemp(t, "alpakr.yaml", `
+version: "1"
+source:
+  url: `+srv.URL+`/events.ndjson?page=1
+handlers:
+  root:
+    filter: ".id != 2"
+    fields:
+      id: ".id"
+`)
+	if got, want := runWithArgs(t, "run", "-c", cfgFile), "{\"id\":1}\n{\"id\":3}\n"; got != want {
+		t.Errorf("output = %q, want %q", got, want)
+	}
+}
+
+func TestRun_MultiSourceSubHandler(t *testing.T) {
+	dataFile := writeTemp(t, "a.json", `[{"loc":{"city":"Leeds"}}]`)
+	cfgFile := writeTemp(t, "alpakr.yaml", `
+version: "1"
+sources:
+  a:
+    path: `+dataFile+`
+output:
+  indent: 0
+handlers:
+  root:
+    source: a
+    each: true
+    fields:
+      loc:
+        handler: loc
+        input: ".loc"
+  loc:
+    fields:
+      city: ".city"
+`)
+	if got, want := runWithArgs(t, "run", "-c", cfgFile), `[{"loc":{"city":"Leeds"}}]`+"\n"; got != want {
+		t.Errorf("output = %q, want %q", got, want)
 	}
 }
