@@ -1,6 +1,8 @@
 package engine
 
 import (
+	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/suprbdev/alpakr/internal/config"
@@ -333,5 +335,132 @@ func TestCompile_BadJQExpression(t *testing.T) {
 	}))
 	if err == nil {
 		t.Fatal("expected compile error for invalid jq")
+	}
+}
+
+func TestExpr_PlainPathMatchesJQ(t *testing.T) {
+	exprs := []string{".", ".a", ".a.b", ".a_1.B2", "._x", ".a.b.c"}
+	inputs := []interface{}{
+		nil,
+		"str",
+		42,
+		[]interface{}{1},
+		map[string]interface{}{},
+		map[string]interface{}{"a": nil},
+		map[string]interface{}{"a": 1},
+		map[string]interface{}{"a": []interface{}{1}},
+		map[string]interface{}{"a": map[string]interface{}{"b": "x"}},
+		map[string]interface{}{"a": map[string]interface{}{"b": map[string]interface{}{"c": true}}},
+		map[string]interface{}{"a_1": map[string]interface{}{"B2": 3}, "_x": "y"},
+	}
+	for _, src := range exprs {
+		x, err := compileExpr(src, customFunctions())
+		if err != nil {
+			t.Fatalf("compile %q: %v", src, err)
+		}
+		if x.path == nil {
+			t.Errorf("%q: expected plain path fast path", src)
+		}
+		slow := &expr{code: x.code}
+		for _, in := range inputs {
+			got, gotErr := x.eval(in)
+			want, wantErr := slow.eval(in)
+			if (gotErr != nil) != (wantErr != nil) || !reflect.DeepEqual(got, want) {
+				t.Errorf("%q on %#v: fast = (%#v, %v), jq = (%#v, %v)", src, in, got, gotErr, want, wantErr)
+			}
+		}
+	}
+}
+
+func TestExpr_NotPlainPath(t *testing.T) {
+	for _, src := range []string{".a?", ".a[0]", ".[\"a\"]", ".a | .b", " .a", ".a.b // 1", "..", ".a-b"} {
+		x, err := compileExpr(src, customFunctions())
+		if err != nil {
+			continue
+		}
+		if x.path != nil {
+			t.Errorf("%q should not use the plain path fast path", src)
+		}
+	}
+}
+
+func TestCompile_InvalidInputSelectors(t *testing.T) {
+	for name, f := range map[string]config.FieldConfig{
+		"sub-handler input": subHandler("other", ".[[["),
+		"inline input":      inlineFields(".[[[", map[string]config.FieldConfig{"x": field(".")}),
+		"nested inline":     inlineFields("", map[string]config.FieldConfig{"x": field(".a |||")}),
+		"empty expression":  field(""),
+	} {
+		_, err := New(cfg(map[string]config.HandlerConfig{
+			"root":  {Fields: map[string]config.FieldConfig{"f": f}},
+			"other": {Fields: map[string]config.FieldConfig{"x": field(".")}},
+		}))
+		if err == nil {
+			t.Errorf("%s: expected compile error", name)
+		}
+	}
+}
+
+func TestCompile_UndefinedSubHandler(t *testing.T) {
+	_, err := New(cfg(map[string]config.HandlerConfig{
+		"root": {Fields: map[string]config.FieldConfig{"f": subHandler("missing", "")}},
+	}))
+	if err == nil {
+		t.Fatal("expected error for undefined sub-handler")
+	}
+}
+
+func TestRun_DottedFieldNameDoesNotCollide(t *testing.T) {
+	e := mustEngine(t, cfg(map[string]config.HandlerConfig{
+		"root": {Fields: map[string]config.FieldConfig{
+			"a.b": field(`"flat"`),
+			"a":   inlineFields("", map[string]config.FieldConfig{"b": field(`"nested"`)}),
+		}},
+	}))
+	got, err := e.Run("root", map[string]interface{}{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]interface{}{"a.b": "flat", "a": map[string]interface{}{"b": "nested"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %#v, want %#v", got, want)
+	}
+}
+
+func TestRun_RecursiveHandler(t *testing.T) {
+	e := mustEngine(t, cfg(map[string]config.HandlerConfig{
+		"node": {Fields: map[string]config.FieldConfig{
+			"name":     field(".name"),
+			"children": subHandler("nodes", ".children"),
+		}},
+		"nodes": {Each: true, Input: ". // []", Fields: map[string]config.FieldConfig{
+			"name":     field(".name"),
+			"children": subHandler("nodes", ".children"),
+		}},
+	}))
+	tree := map[string]interface{}{"name": "a", "children": []interface{}{
+		map[string]interface{}{"name": "b"},
+	}}
+	got, err := e.Run("node", tree)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]interface{}{"name": "a", "children": []interface{}{
+		map[string]interface{}{"name": "b", "children": []interface{}{}},
+	}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %#v, want %#v", got, want)
+	}
+}
+
+func TestRun_ErrorPaths(t *testing.T) {
+	e := mustEngine(t, cfg(map[string]config.HandlerConfig{
+		"root": {Fields: map[string]config.FieldConfig{
+			"loc": inlineFields(".loc", map[string]config.FieldConfig{"city": field(".city | ascii_upcase")}),
+		}},
+	}))
+	_, err := e.Run("root", map[string]interface{}{"loc": map[string]interface{}{"city": 1}})
+	if err == nil || !strings.HasPrefix(err.Error(), "root.loc.city: ") {
+		t.Errorf("err = %v, want prefix root.loc.city:", err)
 	}
 }
