@@ -1,10 +1,6 @@
 package cmd
 
 import (
-	"alpakr/internal/config"
-	"alpakr/internal/engine"
-	"alpakr/internal/output"
-	"alpakr/internal/source"
 	"fmt"
 	"io"
 	"os"
@@ -13,6 +9,10 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/suprbdev/alpakr/internal/config"
+	"github.com/suprbdev/alpakr/internal/engine"
+	"github.com/suprbdev/alpakr/internal/output"
+	"github.com/suprbdev/alpakr/internal/source"
 )
 
 var handlerName string

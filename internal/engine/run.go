@@ -1,10 +1,10 @@
 package engine
 
 import (
-	"alpakr/internal/config"
 	"fmt"
 
 	"github.com/itchyny/gojq"
+	"github.com/suprbdev/alpakr/internal/config"
 )
 
 // Run processes data through the named handler and returns the result.

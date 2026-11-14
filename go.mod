@@ -1,4 +1,4 @@
-module alpakr
+module github.com/suprbdev/alpakr
 
 go 1.26.4
 

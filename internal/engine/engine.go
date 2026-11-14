@@ -1,9 +1,8 @@
 package engine
 
 import (
-	"alpakr/internal/config"
-
 	"github.com/itchyny/gojq"
+	"github.com/suprbdev/alpakr/internal/config"
 )
 
 type Engine struct {

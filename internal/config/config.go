@@ -4,8 +4,8 @@ import "fmt"
 
 type Config struct {
 	Version  string                   `yaml:"version"`
-	Source   SourceConfig             `yaml:"source"`            // default source (single-source configs)
-	Sources  map[string]SourceConfig  `yaml:"sources"`           // named sources map
+	Source   SourceConfig             `yaml:"source"`  // default source (single-source configs)
+	Sources  map[string]SourceConfig  `yaml:"sources"` // named sources map
 	Output   OutputConfig             `yaml:"output"`
 	Handlers map[string]HandlerConfig `yaml:"handlers"`
 }

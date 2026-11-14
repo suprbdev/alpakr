@@ -1,11 +1,11 @@
 package cmd
 
 import (
-	"alpakr/internal/config"
 	"fmt"
 	"sort"
 
 	"github.com/spf13/cobra"
+	"github.com/suprbdev/alpakr/internal/config"
 )
 
 var listHandlersCmd = &cobra.Command{
