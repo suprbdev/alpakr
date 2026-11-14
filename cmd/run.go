@@ -83,7 +83,7 @@ func runRun(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("no source configured for handler %q; pipe data via stdin or pass --stdin", handlerName)
 	}
 	format := srcCfg.Format
-	if fromStdin && (!hasSource || srcCfg.FormatDetected) {
+	if fromStdin && (!hasSource || (srcCfg.FormatDetected && format != "csv")) {
 		format = ""
 	}
 
@@ -92,7 +92,8 @@ func runRun(_ *cobra.Command, _ []string) error {
 		return err
 	}
 	defer func() { _ = in.Close() }()
-	return process(cfg, eng, in, format, inputInfo(srcCfg, fromStdin))
+	opts := []source.Option{source.CSVDelimiter(srcCfg.DelimiterRune()), source.CSVHeader(srcCfg.HasHeader())}
+	return process(cfg, eng, in, format, opts, inputInfo(srcCfg, fromStdin))
 }
 
 // openInput opens stdin, the configured URL's response body or the
@@ -136,11 +137,12 @@ func inputInfo(srcCfg config.SourceConfig, fromStdin bool) os.FileInfo {
 
 // process runs the handler over the values in in. A single JSON value or
 // YAML document is transformed as a whole and written as one document. NDJSON
-// input, or input holding several values or documents, is streamed: each
-// value is a record whose result is written as soon as it is produced.
-func process(cfg *config.Config, eng *engine.Engine, in io.Reader, format string, inInfo os.FileInfo) (err error) {
+// and CSV input, or input holding several values or documents, is streamed:
+// each value (row) is a record whose result is written as soon as it is
+// produced.
+func process(cfg *config.Config, eng *engine.Engine, in io.Reader, format string, opts []source.Option, inInfo os.FileInfo) (err error) {
 	fr := &flushingReader{r: in}
-	vals, err := source.NewValues(fr, format)
+	vals, err := source.NewValues(fr, format, opts...)
 	if err != nil {
 		return err
 	}
@@ -154,7 +156,7 @@ func process(cfg *config.Config, eng *engine.Engine, in io.Reader, format string
 
 	var second interface{}
 	hasSecond := false
-	if format != "ndjson" {
+	if format != "ndjson" && format != "csv" {
 		if second, hasSecond, err = vals.Next(); err != nil {
 			return err
 		}
@@ -229,7 +231,7 @@ func writeOutput(cfg *config.Config, fr *flushingReader, write func(output.Write
 		fr.w = sink.buf
 		defer func() { fr.w = nil }()
 	}
-	w, err := output.New(cfg.Output.Format, *cfg.Output.Indent, sink)
+	w, err := output.New(cfg.Output.Format, *cfg.Output.Indent, sink, output.Delimiter(cfg.Output.DelimiterRune()))
 	if err != nil {
 		return err
 	}

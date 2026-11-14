@@ -18,20 +18,36 @@ type Writer interface {
 // CheckFormat reports whether format is a supported output format.
 func CheckFormat(format string) error {
 	switch strings.ToLower(format) {
-	case "json", "yaml", "yml", "ndjson", "jsonl":
+	case "json", "yaml", "yml", "ndjson", "jsonl", "csv":
 		return nil
 	}
-	return fmt.Errorf("unknown output format %q (want json, yaml or ndjson)", format)
+	return fmt.Errorf("unknown output format %q (want json, yaml, ndjson or csv)", format)
 }
 
+// Option configures New.
+type Option func(*options)
+
+type options struct {
+	delimiter rune
+}
+
+// Delimiter sets the CSV field delimiter (default ',').
+func Delimiter(r rune) Option { return func(o *options) { o.delimiter = r } }
+
 // New returns a Writer for format that writes to out: "json", "yaml" (or
-// "yml"), or "ndjson" (or "jsonl"). indent sets JSON indentation in spaces;
-// 0 produces compact output. It does not apply to ndjson.
-func New(format string, indent int, out io.Writer) (Writer, error) {
+// "yml"), "ndjson" (or "jsonl") or "csv". indent sets JSON indentation in
+// spaces; 0 produces compact output. It does not apply to ndjson or csv.
+func New(format string, indent int, out io.Writer, opts ...Option) (Writer, error) {
 	if err := CheckFormat(format); err != nil {
 		return nil, err
 	}
+	var o options
+	for _, opt := range opts {
+		opt(&o)
+	}
 	switch strings.ToLower(format) {
+	case "csv":
+		return NewCSVWriter(out, o.delimiter), nil
 	case "json":
 		return &JSONWriter{Indent: indent, Out: out}, nil
 	case "ndjson", "jsonl":

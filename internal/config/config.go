@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 	"time"
+	"unicode/utf8"
 
 	"gopkg.in/yaml.v3"
 )
@@ -41,6 +42,9 @@ type SourceConfig struct {
 	Body    string            `yaml:"body"`
 	Timeout string            `yaml:"timeout"` // Go duration, e.g. "30s"; "0" disables; default 30s
 
+	Delimiter string `yaml:"delimiter"` // csv only: single character; default "," ("\t" for .tsv)
+	Header    *bool  `yaml:"header"`    // csv only: first row names the columns; default true
+
 	// FormatDetected reports that Format was inferred from the path or URL
 	// extension rather than set in the config.
 	FormatDetected bool `yaml:"-"`
@@ -60,9 +64,38 @@ func (s SourceConfig) TimeoutDuration() time.Duration {
 }
 
 type OutputConfig struct {
-	Format string `yaml:"format"`
-	Indent *int   `yaml:"indent"` // nil = default (2); 0 = compact
-	File   string `yaml:"file"`
+	Format    string `yaml:"format"`
+	Indent    *int   `yaml:"indent"` // nil = default (2); 0 = compact
+	File      string `yaml:"file"`
+	Delimiter string `yaml:"delimiter"` // csv only: single character; default ","
+}
+
+// DelimiterRune returns the CSV delimiter, or ',' when unset.
+func (o OutputConfig) DelimiterRune() rune { return delimiterRune(o.Delimiter) }
+
+// DelimiterRune returns the CSV delimiter, or ',' when unset.
+func (s SourceConfig) DelimiterRune() rune { return delimiterRune(s.Delimiter) }
+
+// HasHeader reports whether the first CSV row names the columns.
+func (s SourceConfig) HasHeader() bool { return s.Header == nil || *s.Header }
+
+func delimiterRune(d string) rune {
+	for _, r := range d {
+		return r
+	}
+	return ','
+}
+
+// checkDelimiter validates a CSV delimiter: one character that is not a
+// quote or line break.
+func checkDelimiter(label, d string) error {
+	if d == "" {
+		return nil
+	}
+	if utf8.RuneCountInString(d) != 1 || d == "\"" || d == "\r" || d == "\n" || d == string(utf8.RuneError) {
+		return fmt.Errorf("config: %s: 'delimiter' must be a single character other than a quote or line break (got %q)", label, d)
+	}
+	return nil
 }
 
 type HandlerConfig struct {

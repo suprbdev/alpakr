@@ -1,6 +1,6 @@
 # alpakr
 
-YAML-configured data transformation tool. Reads JSON or YAML from a file, URL, or stdin pipe, applies a pipeline of named handlers to restructure and transform the data, and outputs JSON or YAML to stdout or a file.
+YAML-configured data transformation tool. Reads JSON, YAML, NDJSON or CSV from a file, URL, or stdin pipe, applies a pipeline of named handlers to restructure and transform the data, and outputs JSON, YAML, NDJSON or CSV to stdout or a file.
 
 Useful for: migrating between schemas, importing externally sourced data, normalising nested/relational data.
 
@@ -19,7 +19,7 @@ make build   # outputs to ./bin/alpakr
 alpakr run                             # uses alpakr.yaml/yml in cwd, defaults to 'root' handler
 alpakr run --handler staff             # run a specific handler
 alpakr run -c path/to/config.yaml      # explicit config path
-alpakr run --format yaml               # override output format (json | yaml | ndjson)
+alpakr run --format yaml               # override output format (json | yaml | ndjson | csv)
 alpakr run -f ndjson | jq -c .         # one record per line
 alpakr run -o out.json                 # write to file instead of stdout
 
@@ -48,7 +48,9 @@ version: "1"
 source:
   path: ./data/records.json   # local file — mutually exclusive with url:
   # url: https://example.com/data.json
-  # format: json              # json | yaml | ndjson — auto-detected from file/URL extension (.jsonl → ndjson)
+  # format: json              # json | yaml | ndjson | csv — auto-detected from file/URL extension (.jsonl → ndjson, .tsv → csv)
+  # delimiter: ","            # csv only (default ","; tab for .tsv)
+  # header: true              # csv only: first row names the columns
                               # stdin is read only when no source is configured, or with --stdin
                               # stdin format auto-detected by peeking first byte ({ or [ → json, else yaml)
   # method: POST              # HTTP method (default: GET). POST/PUT/PATCH required when body is set.
@@ -59,7 +61,7 @@ source:
   # timeout: 30s              # max wait for headers / each body read (default 30s; "0" = none)
 
 output:
-  format: json                # json | yaml | ndjson (one record per line) — default: json
+  format: json                # json | yaml | ndjson (one record per line) | csv — default: json
   indent: 2                   # JSON indentation (default: 2; 0 = compact single line)
   # file: ./out/result.json   # write to file instead of stdout
 
@@ -187,6 +189,10 @@ With JSON output, each record is written as one compact line (NDJSON) and `inden
 Any JSON or YAML input holding more than one top-level value — NDJSON, concatenated or pretty-printed JSON objects such as `jq` output, or `---`-separated YAML documents — is streamed the same way, from a file, URL or stdin. Without `format: ndjson`, alpakr reads one value ahead to tell a stream from a single document, so the first record is written once the second arrives.
 
 `--limit N` works with NDJSON sources and stops after N records have been written (filtered-out records don't count toward the limit).
+
+### CSV
+
+`.csv` (and tab-separated `.tsv`) sources stream row by row, like NDJSON: each row is an object keyed by the header, and every value is a string — convert with `to_int`, `to_float` or `tonumber`. `-f csv` writes one row per record with the header taken from the fields in config order; nested values become compact JSON. See [`examples/csv`](./examples/csv).
 
 ### Field values
 

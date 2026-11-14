@@ -183,7 +183,7 @@ func TestValues_YAMLDocuments(t *testing.T) {
 }
 
 func TestValues_UnknownFormat(t *testing.T) {
-	if _, err := NewValues(strings.NewReader("x"), "csv"); err == nil {
+	if _, err := NewValues(strings.NewReader("x"), "xml"); err == nil {
 		t.Error("expected error for unknown format")
 	}
 }

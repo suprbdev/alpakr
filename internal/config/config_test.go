@@ -421,8 +421,8 @@ func TestLoadValidation_Version(t *testing.T) {
 
 func TestLoadValidation_UnknownSourceFormat(t *testing.T) {
 	for name, src := range map[string]string{
-		"source":  "source:\n  path: /tmp/x.csv\n  format: csv\n",
-		"sources": "sources:\n  a:\n    path: /tmp/x.csv\n    format: csv\n",
+		"source":  "source:\n  path: /tmp/x.xml\n  format: xml\n",
+		"sources": "sources:\n  a:\n    path: /tmp/x.xml\n    format: xml\n",
 	} {
 		_, err := loadString(t, "version: \"1\"\n"+src+"handlers:\n  root:\n    fields:\n      id: \".id\"\n")
 		if err == nil {
@@ -500,7 +500,7 @@ func TestLoadStrict_UnknownKeys(t *testing.T) {
 		"source": {"source:\n  path: x.json\n  hedaers: {a: b}\nhandlers:\n  root:\n    fields:\n      a: \".a\"\n",
 			`line 4: unknown key "hedaers" in source`},
 		"output": {"output:\n  indnet: 2\nhandlers:\n  root:\n    fields:\n      a: \".a\"\n",
-			`line 3: unknown key "indnet" in output (valid keys: format, indent, file)`},
+			`line 3: unknown key "indnet" in output (valid keys: format, indent, file, delimiter)`},
 		"field": {"handlers:\n  root:\n    fields:\n      loc:\n        handler: root\n        inptu: \".x\"\n",
 			`line 7: unknown key "inptu" in field (valid keys: handler, input, fields)`},
 		"nested inline field": {"handlers:\n  root:\n    fields:\n      loc:\n        fields:\n          city:\n            fields: {a: \".a\"}\n            extra: 1\n",
@@ -635,6 +635,57 @@ func TestVars_InvalidNames(t *testing.T) {
 	for _, name := range []string{"ENV", "1x", "a-b"} {
 		_, err := loadString(t, "version: \"1\"\nvars:\n  "+name+": 1\nhandlers:\n  root:\n    fields:\n      a: \".a\"\n")
 		if err == nil {
+			t.Errorf("%s: expected error", name)
+		}
+	}
+}
+
+func TestCSVSourceConfig(t *testing.T) {
+	cfg := mustLoad(t, `
+version: "1"
+sources:
+  c:
+    path: /tmp/people.csv
+  t:
+    path: /tmp/people.TSV
+  n:
+    path: /tmp/raw.txt
+    format: csv
+    delimiter: ";"
+    header: false
+output:
+  format: csv
+  delimiter: "|"
+handlers:
+  root:
+    source: c
+    fields:
+      id: ".id"
+`)
+	c, tsv, n := cfg.Sources["c"], cfg.Sources["t"], cfg.Sources["n"]
+	if c.Format != "csv" || c.DelimiterRune() != ',' || !c.HasHeader() {
+		t.Errorf("csv source = %+v", c)
+	}
+	if tsv.Format != "csv" || tsv.DelimiterRune() != '\t' {
+		t.Errorf("tsv source = %+v", tsv)
+	}
+	if n.DelimiterRune() != ';' || n.HasHeader() {
+		t.Errorf("explicit csv source = %+v", n)
+	}
+	if cfg.Output.Format != "csv" || cfg.Output.DelimiterRune() != '|' {
+		t.Errorf("output = %+v", cfg.Output)
+	}
+}
+
+func TestCSVSourceConfig_Invalid(t *testing.T) {
+	for name, src := range map[string]string{
+		"delimiter on json": "  path: /tmp/x.json\n  delimiter: \";\"\n",
+		"header on yaml":    "  path: /tmp/x.yaml\n  header: false\n",
+		"two chars":         "  path: /tmp/x.csv\n  delimiter: \";;\"\n",
+		"quote":             "  path: /tmp/x.csv\n  delimiter: '\"'\n",
+		"newline":           "  path: /tmp/x.csv\n  delimiter: \"\\n\"\n",
+	} {
+		if _, err := loadString(t, "version: \"1\"\nsource:\n"+src+"handlers:\n  root:\n    fields:\n      id: \".id\"\n"); err == nil {
 			t.Errorf("%s: expected error", name)
 		}
 	}
