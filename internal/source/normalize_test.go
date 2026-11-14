@@ -160,14 +160,30 @@ func TestParseYAML_RecursiveAnchor(t *testing.T) {
 	}
 }
 
-func TestParseYAML_AliasExpansionIsShared(t *testing.T) {
+func TestParseYAML_AliasBombRejected(t *testing.T) {
 	var b strings.Builder
 	b.WriteString("l0: &l0 [x, x, x, x, x, x, x, x, x, x]\n")
 	for i := 1; i <= 20; i++ {
 		fmt.Fprintf(&b, "l%d: &l%d [*l%d, *l%d, *l%d, *l%d, *l%d, *l%d, *l%d, *l%d, *l%d, *l%d]\n", i, i, i-1, i-1, i-1, i-1, i-1, i-1, i-1, i-1, i-1, i-1)
 	}
-	if _, err := parse([]byte(b.String()), "yaml"); err != nil {
+	_, err := parse([]byte(b.String()), "yaml")
+	if err == nil || !strings.Contains(err.Error(), "excessive aliasing") {
+		t.Fatalf("alias bomb: err = %v, want excessive aliasing", err)
+	}
+}
+
+func TestParseYAML_ModestAliasReuse(t *testing.T) {
+	var b strings.Builder
+	b.WriteString("base: &b {a: 1, b: [1, 2, 3], c: {d: e}}\nitems:\n")
+	for i := 0; i < 5000; i++ {
+		b.WriteString("  - *b\n")
+	}
+	v, err := parse([]byte(b.String()), "yaml")
+	if err != nil {
 		t.Fatal(err)
+	}
+	if n := len(v.(map[string]interface{})["items"].([]interface{})); n != 5000 {
+		t.Errorf("items = %d", n)
 	}
 }
 

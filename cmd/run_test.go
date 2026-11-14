@@ -747,3 +747,96 @@ handlers:
 		t.Errorf("-f json should override ndjson: %q", got)
 	}
 }
+
+const eachConfig = `
+version: "1"
+handlers:
+  root:
+    each: true
+    fields:
+      id: ".id"
+`
+
+func TestStdin_NdjsonOutputFlattensStreamedArrays(t *testing.T) {
+	cfgFile := writeTemp(t, "alpakr.yaml", eachConfig)
+	got := runWithStdin(t, "[{\"id\":1},{\"id\":2}]\n[{\"id\":3}]\n", "run", "-c", cfgFile, "-f", "ndjson")
+	if got != "{\"id\":1}\n{\"id\":2}\n{\"id\":3}\n" {
+		t.Errorf("output = %q", got)
+	}
+}
+
+func TestStdin_StreamLimitCountsElements(t *testing.T) {
+	cfgFile := writeTemp(t, "alpakr.yaml", eachConfig)
+	got := runWithStdin(t, "[{\"id\":1},{\"id\":2},{\"id\":3}]\n[{\"id\":4}]\n", "run", "-c", cfgFile, "-f", "ndjson", "--limit", "2")
+	if got != "{\"id\":1}\n{\"id\":2}\n" {
+		t.Errorf("output = %q", got)
+	}
+}
+
+func TestRun_EmptyNdjsonTruncatesOutput(t *testing.T) {
+	dataFile := writeTemp(t, "empty.ndjson", "")
+	outFile := writeTemp(t, "out.json", "stale")
+	cfgFile := writeTemp(t, "alpakr.yaml", `
+version: "1"
+source:
+  path: `+dataFile+`
+handlers:
+  root:
+    fields:
+      id: ".id"
+`)
+	runWithArgs(t, "run", "-c", cfgFile, "-o", outFile)
+	if got, _ := os.ReadFile(outFile); len(got) != 0 {
+		t.Errorf("output file = %q, want empty", got)
+	}
+}
+
+func TestStdin_FlagSniffsUnlessFormatExplicit(t *testing.T) {
+	dataFile := writeTemp(t, "data.json", `{"id":"file"}`)
+	cfgFile := writeTemp(t, "alpakr.yaml", `
+version: "1"
+source:
+  path: `+dataFile+`
+output:
+  indent: 0
+handlers:
+  root:
+    fields:
+      id: ".id"
+`)
+	if got := runWithStdin(t, "id: from-yaml\n", "run", "-c", cfgFile, "--stdin"); got != `{"id":"from-yaml"}`+"\n" {
+		t.Errorf("sniffed output = %q", got)
+	}
+	explicit := writeTemp(t, "explicit.yaml", `
+version: "1"
+source:
+  path: `+dataFile+`
+  format: json
+handlers:
+  root:
+    fields:
+      id: ".id"
+`)
+	if err := runWithStdinExpectError(t, "id: from-yaml\n", "run", "-c", explicit, "--stdin"); !strings.Contains(err.Error(), "JSON") {
+		t.Errorf("explicit json format should be kept: %v", err)
+	}
+}
+
+func runWithStdinExpectError(t *testing.T, input string, args ...string) error {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := os.Stdin
+	os.Stdin = r
+	defer func() {
+		os.Stdin = old
+		_ = r.Close()
+	}()
+	go func() {
+		_, _ = io.WriteString(w, input)
+		_ = w.Close()
+	}()
+	return runWithArgsExpectError(t, args...)
+}

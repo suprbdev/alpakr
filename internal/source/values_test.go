@@ -1,6 +1,7 @@
 package source
 
 import (
+	"math"
 	"strings"
 	"testing"
 )
@@ -184,5 +185,23 @@ func TestValues_YAMLDocuments(t *testing.T) {
 func TestValues_UnknownFormat(t *testing.T) {
 	if _, err := NewValues(strings.NewReader("x"), "csv"); err == nil {
 		t.Error("expected error for unknown format")
+	}
+}
+
+func TestValues_DetectAfterLongWhitespace(t *testing.T) {
+	pad := strings.Repeat(" \n", 5000)
+	got, err := readOne(strings.NewReader(pad+`{"a":1,"a":2,"b":1e400}`), "")
+	if err != nil {
+		t.Fatalf("JSON after long whitespace: %v", err)
+	}
+	if m := got.(map[string]interface{}); m["a"] != 2 || m["b"] != math.MaxFloat64 {
+		t.Errorf("parsed as %#v, want JSON semantics", m)
+	}
+	y, err := readOne(strings.NewReader("\n\n  a: 1\n  b: 2\n"), "")
+	if err != nil {
+		t.Fatalf("indented YAML: %v", err)
+	}
+	if m := y.(map[string]interface{}); m["a"] != 1 || m["b"] != 2 {
+		t.Errorf("indented YAML = %#v", y)
 	}
 }

@@ -190,3 +190,17 @@ func TestNDJSONWriter(t *testing.T) {
 		t.Errorf("jsonl alias: %v", err)
 	}
 }
+
+func TestNDJSONWriter_WriteOneFlattensArrays(t *testing.T) {
+	var buf bytes.Buffer
+	w, _ := New("ndjson", 0, &buf)
+	if err := w.WriteOne([]interface{}{1, 2}); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.WriteOne(map[string]interface{}{"a": 1}); err != nil {
+		t.Fatal(err)
+	}
+	if got := buf.String(); got != "1\n2\n{\"a\":1}\n" {
+		t.Errorf("got %q", got)
+	}
+}

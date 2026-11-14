@@ -169,6 +169,7 @@ func detectFormat(s *SourceConfig) {
 	if s.Format != "" {
 		return
 	}
+	s.FormatDetected = true
 	ext := filepath.Ext(s.Path)
 	if s.URL != "" {
 		ext = path.Ext(s.URL)

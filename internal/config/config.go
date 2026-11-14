@@ -23,6 +23,10 @@ type SourceConfig struct {
 	Headers map[string]string `yaml:"headers"`
 	Body    string            `yaml:"body"`
 	Timeout string            `yaml:"timeout"` // Go duration, e.g. "30s"; "0" disables; default 30s
+
+	// FormatDetected reports that Format was inferred from the path or URL
+	// extension rather than set in the config.
+	FormatDetected bool `yaml:"-"`
 }
 
 // DefaultTimeout is the URL source timeout used when none is configured.
@@ -74,9 +78,7 @@ func (fs Fields) Get(name string) (FieldConfig, bool) {
 // UnmarshalYAML decodes a mapping of field name to field definition,
 // preserving key order. Duplicate names are rejected.
 func (fs *Fields) UnmarshalYAML(n *yaml.Node) error {
-	if n.Kind == yaml.AliasNode {
-		n = n.Alias
-	}
+	n = resolveAlias(n)
 	if n.Kind != yaml.MappingNode {
 		return fmt.Errorf("line %d: 'fields' must be a map of field name to definition", n.Line)
 	}
@@ -125,7 +127,7 @@ func (f *FieldConfig) UnmarshalYAML(n *yaml.Node) error {
 		return nil
 	case yaml.MappingNode:
 	case yaml.AliasNode:
-		return f.UnmarshalYAML(n.Alias)
+		return f.UnmarshalYAML(resolveAlias(n))
 	default:
 		return fmt.Errorf("line %d: field must be a jq expression string, {handler, input} mapping, or {input, fields} inline object", n.Line)
 	}
@@ -146,6 +148,7 @@ func (f *FieldConfig) UnmarshalYAML(n *yaml.Node) error {
 	}
 
 	if inputNode != nil {
+		inputNode = resolveAlias(inputNode)
 		if inputNode.Kind != yaml.ScalarNode || inputNode.ShortTag() == "!!null" {
 			return fmt.Errorf("line %d: field 'input' must be a jq expression string", inputNode.Line)
 		}
@@ -156,16 +159,25 @@ func (f *FieldConfig) UnmarshalYAML(n *yaml.Node) error {
 	case handlerNode != nil && fieldsNode != nil:
 		return fmt.Errorf("line %d: field cannot have both 'handler' and 'fields' keys", n.Line)
 	case handlerNode != nil:
+		handlerNode = resolveAlias(handlerNode)
 		if handlerNode.Kind != yaml.ScalarNode || handlerNode.ShortTag() != "!!str" || handlerNode.Value == "" {
 			return fmt.Errorf("line %d: field 'handler' must be a non-empty string", handlerNode.Line)
 		}
 		f.Handler = handlerNode.Value
 		return nil
 	case fieldsNode != nil:
+		fieldsNode = resolveAlias(fieldsNode)
 		if fieldsNode.Kind != yaml.MappingNode || len(fieldsNode.Content) == 0 {
 			return fmt.Errorf("line %d: inline 'fields' must be a non-empty map", fieldsNode.Line)
 		}
 		return fieldsNode.Decode(&f.Fields)
 	}
 	return fmt.Errorf("line %d: field map must have a 'handler' key (sub-handler) or a 'fields' key (inline object)", n.Line)
+}
+
+func resolveAlias(n *yaml.Node) *yaml.Node {
+	for n.Kind == yaml.AliasNode && n.Alias != nil {
+		n = n.Alias
+	}
+	return n
 }
