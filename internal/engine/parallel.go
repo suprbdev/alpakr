@@ -11,8 +11,9 @@ type chunkResult struct {
 }
 
 // runItemsParallel is runItems spread over workers. Chunks are assembled in
-// input order, so results, the limit and the first reported error match
-// sequential processing.
+// input order and a failed chunk keeps the records before its failure, so
+// results, the limit and the first reported error match sequential
+// processing: an error after the limit-th record is never reported.
 func (h *compiledHandler) runItemsParallel(items []interface{}, limit, workers int) (interface{}, error) {
 	nChunks := (len(items) + parallelChunk - 1) / parallelChunk
 	results := make([]chan chunkResult, nChunks)
@@ -53,12 +54,12 @@ func (h *compiledHandler) runItemsParallel(items []interface{}, limit, workers i
 	out := make([]interface{}, 0, n)
 	for i := 0; i < nChunks; i++ {
 		r := <-results[i]
-		if r.err != nil {
-			return nil, r.err
-		}
 		out = append(out, r.out...)
 		if limit > 0 && len(out) >= limit {
 			return out[:limit], nil
+		}
+		if r.err != nil {
+			return out, r.err
 		}
 	}
 	return out, nil
@@ -69,7 +70,7 @@ func (h *compiledHandler) runChunk(items []interface{}) chunkResult {
 	for _, item := range items {
 		v, err := h.runOne(item, 0)
 		if err != nil {
-			return chunkResult{err: err}
+			return chunkResult{out: out, err: err}
 		}
 		if v != nil {
 			out = append(out, v)

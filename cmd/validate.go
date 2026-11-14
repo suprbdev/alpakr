@@ -38,7 +38,7 @@ func runValidate(_ *cobra.Command, _ []string) error {
 	}
 	for label, src := range sources {
 		if p := src.Pagination; p != nil {
-			if _, err := source.CompilePagination(p.Next, p.Records); err != nil {
+			if _, err := source.CompilePagination(p.Next, p.Records, vars); err != nil {
 				return fmt.Errorf("%s: %w", label, err)
 			}
 		}

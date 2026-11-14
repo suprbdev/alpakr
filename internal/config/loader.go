@@ -198,7 +198,7 @@ func normaliseSource(s *SourceConfig) {
 func detectFormat(s *SourceConfig) {
 	format, detected := effectiveFormat(*s)
 	s.Format, s.FormatDetected = format, detected
-	if detected && s.Delimiter == "" && strings.EqualFold(extension(*s), ".tsv") {
+	if s.Format == "csv" && s.Delimiter == "" && strings.EqualFold(extension(*s), ".tsv") {
 		s.Delimiter = "\t"
 	}
 }
