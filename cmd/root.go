@@ -25,7 +25,7 @@ var (
 var rootCmd = &cobra.Command{
 	Use:   "alpakr",
 	Short: "YAML-configured data transformation tool",
-	Long: `alpakr reads data from a file or URL, applies YAML-configured
+	Long: `alpakr reads data from a file, URL or stdin, applies YAML-configured
 handler pipelines to transform and restructure it, and outputs
 JSON or YAML to stdout or a file.`,
 	SilenceErrors: true,
