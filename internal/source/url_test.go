@@ -1,11 +1,13 @@
 package source
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestURLSource_GETDefault(t *testing.T) {
@@ -220,4 +222,74 @@ func loadURL(u *URLSource, format string) (interface{}, error) {
 		return readAll(body, format)
 	}
 	return readOne(body, format)
+}
+
+func TestURLSource_TimeoutWaitingForHeaders(t *testing.T) {
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-release
+	}))
+	defer srv.Close()
+	defer close(release)
+
+	start := time.Now()
+	_, err := (&URLSource{URL: srv.URL, Timeout: 50 * time.Millisecond}).Open()
+	if err == nil || !strings.Contains(err.Error(), "no response within 50ms") {
+		t.Fatalf("err = %v, want header timeout", err)
+	}
+	if time.Since(start) > 2*time.Second {
+		t.Errorf("timeout took %s", time.Since(start))
+	}
+}
+
+func TestURLSource_TimeoutStalledBody(t *testing.T) {
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, "{\"a\":1}\n")
+		w.(http.Flusher).Flush()
+		<-release
+	}))
+	defer srv.Close()
+	defer close(release)
+
+	body, err := (&URLSource{URL: srv.URL, Timeout: 50 * time.Millisecond}).Open()
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = body.Close() }()
+	_, err = io.ReadAll(body)
+	if err == nil || !strings.Contains(err.Error(), "no data received for 50ms") {
+		t.Fatalf("err = %v, want stalled body error", err)
+	}
+}
+
+func TestURLSource_TimeoutIsPerRead(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		for i := 0; i < 5; i++ {
+			_, _ = fmt.Fprintf(w, "{\"i\":%d}\n", i)
+			w.(http.Flusher).Flush()
+			time.Sleep(30 * time.Millisecond)
+		}
+	}))
+	defer srv.Close()
+
+	got, err := loadURL(&URLSource{URL: srv.URL, Timeout: 100 * time.Millisecond}, "ndjson")
+	if err != nil {
+		t.Fatalf("slow but steady body should not time out: %v", err)
+	}
+	if n := len(got.([]interface{})); n != 5 {
+		t.Errorf("got %d records, want 5", n)
+	}
+}
+
+func TestURLSource_ZeroTimeoutDisabled(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(20 * time.Millisecond)
+		_, _ = io.WriteString(w, `{"ok":true}`)
+	}))
+	defer srv.Close()
+
+	if _, err := loadURL(&URLSource{URL: srv.URL}, "json"); err != nil {
+		t.Fatal(err)
+	}
 }

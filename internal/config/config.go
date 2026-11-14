@@ -1,6 +1,9 @@
 package config
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 type Config struct {
 	Version  string                   `yaml:"version"`
@@ -17,6 +20,20 @@ type SourceConfig struct {
 	Method  string            `yaml:"method"`
 	Headers map[string]string `yaml:"headers"`
 	Body    string            `yaml:"body"`
+	Timeout string            `yaml:"timeout"` // Go duration, e.g. "30s"; "0" disables; default 30s
+}
+
+// DefaultTimeout is the URL source timeout used when none is configured.
+const DefaultTimeout = 30 * time.Second
+
+// TimeoutDuration returns the configured URL timeout, or DefaultTimeout when
+// unset. The value has already been validated by Load.
+func (s SourceConfig) TimeoutDuration() time.Duration {
+	if s.Timeout == "" {
+		return DefaultTimeout
+	}
+	d, _ := time.ParseDuration(s.Timeout)
+	return d
 }
 
 type OutputConfig struct {

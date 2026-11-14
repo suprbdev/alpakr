@@ -90,6 +90,14 @@ source:
   # Only valid with 'url'. Requires method to be POST, PUT, or PATCH.
   # body: '{"filter": "active", "limit": 100}'
 
+  # timeout: how long to wait on the server before giving up. Only valid with
+  # 'url'. Applies to connecting and receiving the response headers, and then
+  # to each wait for more of the body — a large download or ndjson stream that
+  # keeps arriving can run longer in total, but one that stalls is aborted.
+  # Value is a duration with a unit: 500ms, 30s, 2m, 1h. "0" disables it.
+  # Default: 30s.
+  # timeout: 30s
+
 
 # =============================================================================
 # sources (multi-source configs)
