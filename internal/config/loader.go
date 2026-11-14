@@ -44,6 +44,14 @@ func validate(cfg *Config, configPath string) error {
 			return err
 		}
 	}
+	if cfg.Output.Indent != nil && *cfg.Output.Indent < 0 {
+		return fmt.Errorf("config: output.indent must be >= 0")
+	}
+	switch cfg.Output.Format {
+	case "", "json", "yaml", "yml":
+	default:
+		return fmt.Errorf("config: output.format must be json or yaml (got %q)", cfg.Output.Format)
+	}
 	if len(cfg.Handlers) == 0 {
 		return fmt.Errorf("config: handlers must be non-empty")
 	}
@@ -112,8 +120,9 @@ func applyDefaults(cfg *Config, _ string) {
 	if cfg.Output.Format == "" {
 		cfg.Output.Format = "json"
 	}
-	if cfg.Output.Indent == 0 {
-		cfg.Output.Indent = 2
+	if cfg.Output.Indent == nil {
+		indent := 2
+		cfg.Output.Indent = &indent
 	}
 
 	normaliseSource(&cfg.Source)

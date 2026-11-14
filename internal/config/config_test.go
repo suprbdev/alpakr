@@ -113,8 +113,8 @@ handlers:
 	if cfg.Output.Format != "json" {
 		t.Errorf("default output format = %q, want json", cfg.Output.Format)
 	}
-	if cfg.Output.Indent != 2 {
-		t.Errorf("default indent = %d, want 2", cfg.Output.Indent)
+	if cfg.Output.Indent == nil || *cfg.Output.Indent != 2 {
+		t.Errorf("default indent = %v, want 2", cfg.Output.Indent)
 	}
 	if cfg.Source.Format != "json" {
 		t.Errorf("auto-detected format = %q, want json", cfg.Source.Format)
@@ -343,5 +343,40 @@ handlers:
 `)
 	if err == nil {
 		t.Fatal("expected error for bare map without handler or fields key")
+	}
+}
+
+func TestLoadOutput_IndentZeroKept(t *testing.T) {
+	cfg := mustLoad(t, `
+version: "1"
+output:
+  indent: 0
+handlers:
+  root:
+    fields:
+      id: ".id"
+`)
+	if cfg.Output.Indent == nil || *cfg.Output.Indent != 0 {
+		t.Errorf("indent = %v, want explicit 0", cfg.Output.Indent)
+	}
+}
+
+func TestLoadOutput_Invalid(t *testing.T) {
+	for name, output := range map[string]string{
+		"negative indent": "indent: -1",
+		"unknown format":  "format: xml",
+	} {
+		_, err := loadString(t, `
+version: "1"
+output:
+  `+output+`
+handlers:
+  root:
+    fields:
+      id: ".id"
+`)
+		if err == nil {
+			t.Errorf("%s: expected error", name)
+		}
 	}
 }
