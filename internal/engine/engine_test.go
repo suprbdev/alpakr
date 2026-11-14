@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/suprbdev/alpakr/internal/config"
+	"github.com/suprbdev/alpakr/internal/record"
 )
 
 func cfg(handlers map[string]config.HandlerConfig) *config.Config {
@@ -17,6 +18,45 @@ func cfg(handlers map[string]config.HandlerConfig) *config.Config {
 }
 
 func field(expr string) config.FieldConfig { return config.FieldConfig{Expr: expr} }
+
+// fields builds an ordered field list from alternating names and configs.
+func fields(kv ...interface{}) config.Fields {
+	fs := make(config.Fields, 0, len(kv)/2)
+	for i := 0; i < len(kv); i += 2 {
+		fs = append(fs, config.Field{Name: kv[i].(string), FieldConfig: kv[i+1].(config.FieldConfig)})
+	}
+	return fs
+}
+
+// plain converts record.Objects in v to maps so results can be compared
+// with map literals.
+func plain(v interface{}) interface{} {
+	switch x := v.(type) {
+	case *record.Object:
+		m := make(map[string]interface{}, len(x.Keys))
+		for i, k := range x.Keys {
+			m[k] = plain(x.Values[i])
+		}
+		return m
+	case []interface{}:
+		a := make([]interface{}, len(x))
+		for i, e := range x {
+			a[i] = plain(e)
+		}
+		return a
+	}
+	return v
+}
+
+func runPlain(e *Engine, name string, data interface{}) (interface{}, error) {
+	v, err := e.Run(name, data)
+	return plain(v), err
+}
+
+func runLimitPlain(e *Engine, name string, data interface{}, limit int) (interface{}, error) {
+	v, err := e.RunLimit(name, data, limit)
+	return plain(v), err
+}
 
 func subHandler(handler, input string) config.FieldConfig {
 	return config.FieldConfig{Handler: handler, Input: input}
@@ -34,15 +74,15 @@ func mustEngine(t *testing.T, c *config.Config) *Engine {
 func TestRun_SimpleFields(t *testing.T) {
 	e := mustEngine(t, cfg(map[string]config.HandlerConfig{
 		"root": {
-			Fields: map[string]config.FieldConfig{
-				"id":    field(".id"),
-				"upper": field(".name | ascii_upcase"),
-			},
+			Fields: fields(
+				"id", field(".id"),
+				"upper", field(".name | ascii_upcase"),
+			),
 		},
 	}))
 
 	data := map[string]interface{}{"id": float64(1), "name": "alice"}
-	result, err := e.Run("root", data)
+	result, err := runPlain(e, "root", data)
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -60,9 +100,9 @@ func TestRun_Each(t *testing.T) {
 	e := mustEngine(t, cfg(map[string]config.HandlerConfig{
 		"root": {
 			Each: true,
-			Fields: map[string]config.FieldConfig{
-				"name": field(".name"),
-			},
+			Fields: fields(
+				"name", field(".name"),
+			),
 		},
 	}))
 
@@ -70,7 +110,7 @@ func TestRun_Each(t *testing.T) {
 		map[string]interface{}{"name": "alice"},
 		map[string]interface{}{"name": "bob"},
 	}
-	result, err := e.Run("root", data)
+	result, err := runPlain(e, "root", data)
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -89,9 +129,9 @@ func TestRun_Filter(t *testing.T) {
 		"root": {
 			Each:   true,
 			Filter: ".active",
-			Fields: map[string]config.FieldConfig{
-				"name": field(".name"),
-			},
+			Fields: fields(
+				"name", field(".name"),
+			),
 		},
 	}))
 
@@ -100,7 +140,7 @@ func TestRun_Filter(t *testing.T) {
 		map[string]interface{}{"name": "bob", "active": false},
 		map[string]interface{}{"name": "carol", "active": true},
 	}
-	result, err := e.Run("root", data)
+	result, err := runPlain(e, "root", data)
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -116,9 +156,9 @@ func TestRun_InputSelector(t *testing.T) {
 		"root": {
 			Input: ".data",
 			Each:  true,
-			Fields: map[string]config.FieldConfig{
-				"name": field(".name"),
-			},
+			Fields: fields(
+				"name", field(".name"),
+			),
 		},
 	}))
 
@@ -127,7 +167,7 @@ func TestRun_InputSelector(t *testing.T) {
 			map[string]interface{}{"name": "alice"},
 		},
 	}
-	result, err := e.Run("root", data)
+	result, err := runPlain(e, "root", data)
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -141,16 +181,16 @@ func TestRun_InputSelector(t *testing.T) {
 func TestRun_SubHandler(t *testing.T) {
 	e := mustEngine(t, cfg(map[string]config.HandlerConfig{
 		"root": {
-			Fields: map[string]config.FieldConfig{
-				"name":     field(".name"),
-				"location": subHandler("loc", ".loc"),
-			},
+			Fields: fields(
+				"name", field(".name"),
+				"location", subHandler("loc", ".loc"),
+			),
 		},
 		"loc": {
-			Fields: map[string]config.FieldConfig{
-				"city":    field(".city"),
-				"country": field(".country | ascii_upcase"),
-			},
+			Fields: fields(
+				"city", field(".city"),
+				"country", field(".country | ascii_upcase"),
+			),
 		},
 	}))
 
@@ -158,7 +198,7 @@ func TestRun_SubHandler(t *testing.T) {
 		"name": "alice",
 		"loc":  map[string]interface{}{"city": "London", "country": "gb"},
 	}
-	result, err := e.Run("root", data)
+	result, err := runPlain(e, "root", data)
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -176,12 +216,12 @@ func TestRun_SubHandler(t *testing.T) {
 func TestRun_CustomFunctions(t *testing.T) {
 	e := mustEngine(t, cfg(map[string]config.HandlerConfig{
 		"root": {
-			Fields: map[string]config.FieldConfig{
-				"rounded":  field(".miles * 1.60934 | round2"),
-				"slug":     field(".label | slugify"),
-				"as_int":   field(".score | to_int"),
-				"as_float": field(".count | to_float"),
-			},
+			Fields: fields(
+				"rounded", field(".miles * 1.60934 | round2"),
+				"slug", field(".label | slugify"),
+				"as_int", field(".score | to_int"),
+				"as_float", field(".count | to_float"),
+			),
 		},
 	}))
 
@@ -191,7 +231,7 @@ func TestRun_CustomFunctions(t *testing.T) {
 		"score": float64(7),
 		"count": 3,
 	}
-	result, err := e.Run("root", data)
+	result, err := runPlain(e, "root", data)
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -215,11 +255,11 @@ func TestRun_EachOnNonArray(t *testing.T) {
 	e := mustEngine(t, cfg(map[string]config.HandlerConfig{
 		"root": {
 			Each:   true,
-			Fields: map[string]config.FieldConfig{"name": field(".name")},
+			Fields: fields("name", field(".name")),
 		},
 	}))
 
-	_, err := e.Run("root", map[string]interface{}{"name": "alice"})
+	_, err := runPlain(e, "root", map[string]interface{}{"name": "alice"})
 	if err == nil {
 		t.Fatal("expected error for each on non-array")
 	}
@@ -227,29 +267,29 @@ func TestRun_EachOnNonArray(t *testing.T) {
 
 func TestRun_UnknownHandler(t *testing.T) {
 	e := mustEngine(t, cfg(map[string]config.HandlerConfig{
-		"root": {Fields: map[string]config.FieldConfig{"id": field(".id")}},
+		"root": {Fields: fields("id", field(".id"))},
 	}))
 
-	_, err := e.Run("missing", map[string]interface{}{})
+	_, err := runPlain(e, "missing", map[string]interface{}{})
 	if err == nil {
 		t.Fatal("expected error for unknown handler")
 	}
 }
 
-func inlineFields(input string, fields map[string]config.FieldConfig) config.FieldConfig {
-	return config.FieldConfig{Input: input, Fields: fields}
+func inlineFields(input string, fs config.Fields) config.FieldConfig {
+	return config.FieldConfig{Input: input, Fields: fs}
 }
 
 func TestRun_InlineFields(t *testing.T) {
 	e := mustEngine(t, cfg(map[string]config.HandlerConfig{
 		"root": {
-			Fields: map[string]config.FieldConfig{
-				"name": field(".name"),
-				"location": inlineFields(".loc", map[string]config.FieldConfig{
-					"city":    field(".city"),
-					"country": field(".country | ascii_upcase"),
-				}),
-			},
+			Fields: fields(
+				"name", field(".name"),
+				"location", inlineFields(".loc", fields(
+					"city", field(".city"),
+					"country", field(".country | ascii_upcase"),
+				)),
+			),
 		},
 	}))
 
@@ -257,7 +297,7 @@ func TestRun_InlineFields(t *testing.T) {
 		"name": "alice",
 		"loc":  map[string]interface{}{"city": "London", "country": "gb"},
 	}
-	result, err := e.Run("root", data)
+	result, err := runPlain(e, "root", data)
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -275,17 +315,17 @@ func TestRun_InlineFields(t *testing.T) {
 func TestRun_InlineFields_NoInput(t *testing.T) {
 	e := mustEngine(t, cfg(map[string]config.HandlerConfig{
 		"root": {
-			Fields: map[string]config.FieldConfig{
-				"meta": inlineFields("", map[string]config.FieldConfig{
-					"id":   field(".id"),
-					"slug": field(".name | slugify"),
-				}),
-			},
+			Fields: fields(
+				"meta", inlineFields("", fields(
+					"id", field(".id"),
+					"slug", field(".name | slugify"),
+				)),
+			),
 		},
 	}))
 
 	data := map[string]interface{}{"id": float64(7), "name": "Hello World"}
-	result, err := e.Run("root", data)
+	result, err := runPlain(e, "root", data)
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -302,18 +342,18 @@ func TestRun_InlineFields_NoInput(t *testing.T) {
 func TestRun_InlineFields_DeepNesting(t *testing.T) {
 	e := mustEngine(t, cfg(map[string]config.HandlerConfig{
 		"root": {
-			Fields: map[string]config.FieldConfig{
-				"a": inlineFields("", map[string]config.FieldConfig{
-					"b": inlineFields("", map[string]config.FieldConfig{
-						"val": field(".x"),
-					}),
-				}),
-			},
+			Fields: fields(
+				"a", inlineFields("", fields(
+					"b", inlineFields("", fields(
+						"val", field(".x"),
+					)),
+				)),
+			),
 		},
 	}))
 
 	data := map[string]interface{}{"x": "deep"}
-	result, err := e.Run("root", data)
+	result, err := runPlain(e, "root", data)
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -328,9 +368,9 @@ func TestRun_InlineFields_DeepNesting(t *testing.T) {
 func TestCompile_BadJQExpression(t *testing.T) {
 	_, err := New(cfg(map[string]config.HandlerConfig{
 		"root": {
-			Fields: map[string]config.FieldConfig{
-				"bad": field(".foo ||| invalid"),
-			},
+			Fields: fields(
+				"bad", field(".foo ||| invalid"),
+			),
 		},
 	}))
 	if err == nil {
@@ -385,15 +425,16 @@ func TestExpr_NotPlainPath(t *testing.T) {
 }
 
 func TestCompile_InvalidInputSelectors(t *testing.T) {
-	for name, f := range map[string]config.FieldConfig{
-		"sub-handler input": subHandler("other", ".[[["),
-		"inline input":      inlineFields(".[[[", map[string]config.FieldConfig{"x": field(".")}),
-		"nested inline":     inlineFields("", map[string]config.FieldConfig{"x": field(".a |||")}),
-		"empty expression":  field(""),
-	} {
+	for _, f := range fields(
+		"sub-handler input", subHandler("other", ".[[["),
+		"inline input", inlineFields(".[[[", fields("x", field("."))),
+		"nested inline", inlineFields("", fields("x", field(".a |||"))),
+		"empty expression", field(""),
+	) {
+		name := f.Name
 		_, err := New(cfg(map[string]config.HandlerConfig{
-			"root":  {Fields: map[string]config.FieldConfig{"f": f}},
-			"other": {Fields: map[string]config.FieldConfig{"x": field(".")}},
+			"root":  {Fields: fields("f", f.FieldConfig)},
+			"other": {Fields: fields("x", field("."))},
 		}))
 		if err == nil {
 			t.Errorf("%s: expected compile error", name)
@@ -403,7 +444,7 @@ func TestCompile_InvalidInputSelectors(t *testing.T) {
 
 func TestCompile_UndefinedSubHandler(t *testing.T) {
 	_, err := New(cfg(map[string]config.HandlerConfig{
-		"root": {Fields: map[string]config.FieldConfig{"f": subHandler("missing", "")}},
+		"root": {Fields: fields("f", subHandler("missing", ""))},
 	}))
 	if err == nil {
 		t.Fatal("expected error for undefined sub-handler")
@@ -412,12 +453,12 @@ func TestCompile_UndefinedSubHandler(t *testing.T) {
 
 func TestRun_DottedFieldNameDoesNotCollide(t *testing.T) {
 	e := mustEngine(t, cfg(map[string]config.HandlerConfig{
-		"root": {Fields: map[string]config.FieldConfig{
-			"a.b": field(`"flat"`),
-			"a":   inlineFields("", map[string]config.FieldConfig{"b": field(`"nested"`)}),
-		}},
+		"root": {Fields: fields(
+			"a.b", field(`"flat"`),
+			"a", inlineFields("", fields("b", field(`"nested"`))),
+		)},
 	}))
-	got, err := e.Run("root", map[string]interface{}{})
+	got, err := runPlain(e, "root", map[string]interface{}{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -429,19 +470,19 @@ func TestRun_DottedFieldNameDoesNotCollide(t *testing.T) {
 
 func TestRun_RecursiveHandler(t *testing.T) {
 	e := mustEngine(t, cfg(map[string]config.HandlerConfig{
-		"node": {Fields: map[string]config.FieldConfig{
-			"name":     field(".name"),
-			"children": subHandler("nodes", ".children"),
-		}},
-		"nodes": {Each: true, Input: ". // []", Fields: map[string]config.FieldConfig{
-			"name":     field(".name"),
-			"children": subHandler("nodes", ".children"),
-		}},
+		"node": {Fields: fields(
+			"name", field(".name"),
+			"children", subHandler("nodes", ".children"),
+		)},
+		"nodes": {Each: true, Input: ". // []", Fields: fields(
+			"name", field(".name"),
+			"children", subHandler("nodes", ".children"),
+		)},
 	}))
 	tree := map[string]interface{}{"name": "a", "children": []interface{}{
 		map[string]interface{}{"name": "b"},
 	}}
-	got, err := e.Run("node", tree)
+	got, err := runPlain(e, "node", tree)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -455,11 +496,11 @@ func TestRun_RecursiveHandler(t *testing.T) {
 
 func TestRun_ErrorPaths(t *testing.T) {
 	e := mustEngine(t, cfg(map[string]config.HandlerConfig{
-		"root": {Fields: map[string]config.FieldConfig{
-			"loc": inlineFields(".loc", map[string]config.FieldConfig{"city": field(".city | ascii_upcase")}),
-		}},
+		"root": {Fields: fields(
+			"loc", inlineFields(".loc", fields("city", field(".city | ascii_upcase"))),
+		)},
 	}))
-	_, err := e.Run("root", map[string]interface{}{"loc": map[string]interface{}{"city": 1}})
+	_, err := runPlain(e, "root", map[string]interface{}{"loc": map[string]interface{}{"city": 1}})
 	if err == nil || !strings.HasPrefix(err.Error(), "root.loc.city: ") {
 		t.Errorf("err = %v, want prefix root.loc.city:", err)
 	}
@@ -470,7 +511,7 @@ func TestRunLimit(t *testing.T) {
 		"root": {
 			Each:   true,
 			Filter: ".keep",
-			Fields: map[string]config.FieldConfig{"id": field(".id")},
+			Fields: fields("id", field(".id")),
 		},
 	}))
 	var items []interface{}
@@ -485,7 +526,7 @@ func TestRunLimit(t *testing.T) {
 		{2, []interface{}{1, 3}},
 		{100, []interface{}{1, 3, 5, 7, 9}},
 	} {
-		got, err := e.RunLimit("root", items, tc.limit)
+		got, err := runLimitPlain(e, "root", items, tc.limit)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -501,25 +542,25 @@ func TestRunLimit(t *testing.T) {
 
 func TestRunLimit_StopsEarly(t *testing.T) {
 	e := mustEngine(t, cfg(map[string]config.HandlerConfig{
-		"root": {Each: true, Fields: map[string]config.FieldConfig{"x": field(".x | ascii_upcase")}},
+		"root": {Each: true, Fields: fields("x", field(".x | ascii_upcase"))},
 	}))
 	items := []interface{}{
 		map[string]interface{}{"x": "a"},
 		map[string]interface{}{"x": 1},
 	}
-	if _, err := e.RunLimit("root", items, 1); err != nil {
+	if _, err := runLimitPlain(e, "root", items, 1); err != nil {
 		t.Errorf("record past the limit was evaluated: %v", err)
 	}
-	if _, err := e.RunLimit("root", items, 0); err == nil {
+	if _, err := runLimitPlain(e, "root", items, 0); err == nil {
 		t.Error("expected error from second record without limit")
 	}
 }
 
 func TestRun_SelfReferenceFailsCleanly(t *testing.T) {
 	e := mustEngine(t, cfg(map[string]config.HandlerConfig{
-		"root": {Fields: map[string]config.FieldConfig{"self": subHandler("root", "")}},
+		"root": {Fields: fields("self", subHandler("root", ""))},
 	}))
-	_, err := e.Run("root", map[string]interface{}{})
+	_, err := runPlain(e, "root", map[string]interface{}{})
 	if err == nil || !strings.Contains(err.Error(), "nested more than") {
 		t.Fatalf("err = %v, want depth error", err)
 	}
@@ -531,12 +572,12 @@ func TestRun_SelfReferenceFailsCleanly(t *testing.T) {
 func TestRun_JQEnvironment(t *testing.T) {
 	t.Setenv("ALPAKR_REGION", "eu")
 	e := mustEngine(t, cfg(map[string]config.HandlerConfig{
-		"root": {Fields: map[string]config.FieldConfig{
-			"a": field("$ENV.ALPAKR_REGION"),
-			"b": field("env.ALPAKR_REGION"),
-		}},
+		"root": {Fields: fields(
+			"a", field("$ENV.ALPAKR_REGION"),
+			"b", field("env.ALPAKR_REGION"),
+		)},
 	}))
-	got, err := e.Run("root", nil)
+	got, err := runPlain(e, "root", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

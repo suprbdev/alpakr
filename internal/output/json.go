@@ -1,54 +1,71 @@
 package output
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"math"
 	"strings"
+
+	"github.com/suprbdev/alpakr/internal/record"
 )
 
-// JSONWriter writes JSON without HTML escaping.
+// JSONWriter writes JSON without HTML escaping. Objects produced by handlers
+// keep their config field order.
 type JSONWriter struct {
 	// Indent is the number of spaces per indentation level; 0 writes compact JSON.
 	Indent int
 	Out    io.Writer
 
-	line *json.Encoder
+	buf    []byte
+	indent bytes.Buffer
 }
 
 // Write encodes v as a single JSON document followed by a newline.
 func (w *JSONWriter) Write(v interface{}) error {
-	enc := json.NewEncoder(w.Out)
-	enc.SetEscapeHTML(false)
-	if w.Indent > 0 {
-		enc.SetIndent("", strings.Repeat(" ", w.Indent))
-	}
-	return encodeJSON(enc, v)
+	return w.write(v, w.Indent)
 }
 
 // WriteOne writes a single record as a JSON line (no indent, newline-terminated).
 func (w *JSONWriter) WriteOne(v interface{}) error {
-	if w.line == nil {
-		w.line = json.NewEncoder(w.Out)
-		w.line.SetEscapeHTML(false)
-	}
-	return encodeJSON(w.line, v)
+	return w.write(v, 0)
 }
 
-// encodeJSON encodes v, retrying with NaN and infinities replaced as jq
-// prints them (null and ±1.7976931348623157e+308) if JSON rejects them.
-func encodeJSON(enc *json.Encoder, v interface{}) error {
-	err := enc.Encode(v)
+func (w *JSONWriter) write(v interface{}, indent int) error {
+	data, err := encodeJSON(w.buf[:0], v)
+	if err != nil {
+		return err
+	}
+	w.buf = data
+	if indent > 0 {
+		w.indent.Reset()
+		if err := json.Indent(&w.indent, data, "", strings.Repeat(" ", indent)); err != nil {
+			return fmt.Errorf("encoding JSON: %w", err)
+		}
+		data = w.indent.Bytes()
+	}
+	if _, err := w.Out.Write(data); err != nil {
+		return err
+	}
+	_, err = w.Out.Write([]byte{'\n'})
+	return err
+}
+
+// encodeJSON appends the compact encoding of v to dst, retrying with NaN and
+// infinities replaced as jq prints them (null and ±1.7976931348623157e+308)
+// if JSON rejects them.
+func encodeJSON(dst []byte, v interface{}) ([]byte, error) {
+	data, err := record.AppendJSON(dst, v)
 	var unsupported *json.UnsupportedValueError
 	if errors.As(err, &unsupported) {
-		err = enc.Encode(finiteFloats(v))
+		data, err = record.AppendJSON(dst, finiteFloats(v))
 	}
 	if err != nil {
-		return fmt.Errorf("encoding JSON: %w", err)
+		return nil, fmt.Errorf("encoding JSON: %w", err)
 	}
-	return nil
+	return data, nil
 }
 
 func finiteFloats(v interface{}) interface{} {
@@ -60,6 +77,12 @@ func finiteFloats(v interface{}) interface{} {
 		if math.IsInf(x, 0) {
 			return math.Copysign(math.MaxFloat64, x)
 		}
+	case *record.Object:
+		o := &record.Object{Keys: x.Keys, Values: make([]interface{}, len(x.Values))}
+		for i, e := range x.Values {
+			o.Values[i] = finiteFloats(e)
+		}
+		return o
 	case map[string]interface{}:
 		m := make(map[string]interface{}, len(x))
 		for k, e := range x {

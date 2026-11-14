@@ -19,7 +19,7 @@ handlers:
     fields:
       name: ".name | ascii_upcase"
 `)
-	f := cfg.Handlers["root"].Fields["name"]
+	f := mustField(t, cfg.Handlers["root"].Fields, "name")
 	if f.Expr != ".name | ascii_upcase" {
 		t.Errorf("Expr = %q, want %q", f.Expr, ".name | ascii_upcase")
 	}
@@ -43,7 +43,7 @@ handlers:
     fields:
       name: ".name"
 `)
-	f := cfg.Handlers["root"].Fields["location"]
+	f := mustField(t, cfg.Handlers["root"].Fields, "location")
 	if f.Handler != "loc" {
 		t.Errorf("Handler = %q, want %q", f.Handler, "loc")
 	}
@@ -270,15 +270,15 @@ handlers:
           city: ".city"
           country: ".country"
 `)
-	f := cfg.Handlers["root"].Fields["location"]
+	f := mustField(t, cfg.Handlers["root"].Fields, "location")
 	if f.Fields == nil {
 		t.Fatal("Fields should be set for inline object")
 	}
 	if f.Input != ".loc" {
 		t.Errorf("Input = %q, want .loc", f.Input)
 	}
-	if f.Fields["city"].Expr != ".city" {
-		t.Errorf("city expr = %q, want .city", f.Fields["city"].Expr)
+	if mustField(t, f.Fields, "city").Expr != ".city" {
+		t.Errorf("city expr = %q, want .city", mustField(t, f.Fields, "city").Expr)
 	}
 	if f.Handler != "" || f.Expr != "" {
 		t.Errorf("Handler and Expr should be empty for inline object")
@@ -298,7 +298,7 @@ handlers:
           id: ".id"
           slug: ".name | slugify"
 `)
-	f := cfg.Handlers["root"].Fields["meta"]
+	f := mustField(t, cfg.Handlers["root"].Fields, "meta")
 	if f.Fields == nil {
 		t.Fatal("Fields should be set")
 	}
@@ -530,8 +530,46 @@ func TestLoadStrict_FieldShapes(t *testing.T) {
 func TestLoadStrict_ScalarFieldForms(t *testing.T) {
 	cfg := mustLoad(t, "version: \"1\"\nhandlers:\n  root:\n    fields:\n      n: 5\n      b: true\n      q: '\"lit\"'\n")
 	for name, want := range map[string]string{"n": "5", "b": "true", "q": `"lit"`} {
-		if got := cfg.Handlers["root"].Fields[name].Expr; got != want {
+		if got := mustField(t, cfg.Handlers["root"].Fields, name).Expr; got != want {
 			t.Errorf("%s: Expr = %q, want %q", name, got, want)
 		}
+	}
+}
+
+func mustField(t *testing.T, fs Fields, name string) FieldConfig {
+	t.Helper()
+	f, ok := fs.Get(name)
+	if !ok {
+		t.Fatalf("field %q not found", name)
+	}
+	return f
+}
+
+func TestFields_KeepConfigOrder(t *testing.T) {
+	cfg := mustLoad(t, "version: \"1\"\nhandlers:\n  root:\n    fields:\n      zeta: \".z\"\n      alpha: \".a\"\n      mid:\n        fields:\n          y: \".y\"\n          b: \".b\"\n")
+	var names []string
+	for _, f := range cfg.Handlers["root"].Fields {
+		names = append(names, f.Name)
+	}
+	if strings.Join(names, ",") != "zeta,alpha,mid" {
+		t.Errorf("order = %v", names)
+	}
+	mid := mustField(t, cfg.Handlers["root"].Fields, "mid")
+	if mid.Fields[0].Name != "y" || mid.Fields[1].Name != "b" {
+		t.Errorf("nested order = %+v", mid.Fields)
+	}
+}
+
+func TestFields_Duplicate(t *testing.T) {
+	_, err := loadString(t, "version: \"1\"\nhandlers:\n  root:\n    fields:\n      a: \".a\"\n      a: \".b\"\n")
+	if err == nil || !strings.Contains(err.Error(), `duplicate field "a"`) {
+		t.Errorf("err = %v", err)
+	}
+}
+
+func TestFields_NullValue(t *testing.T) {
+	_, err := loadString(t, "version: \"1\"\nhandlers:\n  root:\n    fields:\n      a:\n")
+	if err == nil || !strings.Contains(err.Error(), `line 5: field "a" has no value`) {
+		t.Errorf("err = %v", err)
 	}
 }

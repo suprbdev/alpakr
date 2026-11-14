@@ -464,7 +464,7 @@ handlers:
       type: ".d | type"
       one: '.codes["1"]'
 `)
-	if got, want := runWithArgs(t, "run", "-c", cfgFile), `[{"d":"2024-01-01","one":"one","type":"string"}]`+"\n"; got != want {
+	if got, want := runWithArgs(t, "run", "-c", cfgFile), `[{"d":"2024-01-01","type":"string","one":"one"}]`+"\n"; got != want {
 		t.Errorf("output = %q, want %q", got, want)
 	}
 }
@@ -694,5 +694,34 @@ handlers:
 	runWithArgs(t, "run", "-c", cfgFile, "-o", dataFile)
 	if got, _ := os.ReadFile(dataFile); string(got) != `{"id":1}`+"\n" {
 		t.Errorf("in-place batch output = %q", got)
+	}
+}
+
+func TestRun_OutputKeepsConfigFieldOrder(t *testing.T) {
+	dataFile := writeTemp(t, "data.json", `[{"n":"x","c":"Leeds","z":1}]`)
+	cfgFile := writeTemp(t, "alpakr.yaml", `
+version: "1"
+source:
+  path: `+dataFile+`
+output:
+  indent: 0
+handlers:
+  root:
+    each: true
+    fields:
+      zeta: ".z"
+      name: ".n"
+      place:
+        fields:
+          town: ".c"
+          code: '"GB"'
+      raw: "{b: 1, a: 2}"
+`)
+	if got, want := runWithArgs(t, "run", "-c", cfgFile), `[{"zeta":1,"name":"x","place":{"town":"Leeds","code":"GB"},"raw":{"a":2,"b":1}}]`+"\n"; got != want {
+		t.Errorf("json = %q, want %q", got, want)
+	}
+	want := "- zeta: 1\n  name: x\n  place:\n    town: Leeds\n    code: GB\n  raw:\n    a: 2\n    b: 1\n"
+	if got := runWithArgs(t, "run", "-c", cfgFile, "-f", "yaml"); got != want {
+		t.Errorf("yaml = %q, want %q", got, want)
 	}
 }

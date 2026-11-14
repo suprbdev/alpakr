@@ -138,3 +138,29 @@ func TestYAMLWriter_HugeBigIntRoundTrips(t *testing.T) {
 		t.Errorf("output does not parse back: %v", err)
 	}
 }
+
+func TestScalarNode_MatchesYAMLEncode(t *testing.T) {
+	values := []interface{}{
+		nil, true, false, 0, -42, 1 << 40, 1.5, 3.0, 1e21, 1e-7, math.Inf(1), math.Inf(-1), math.NaN(),
+		"", "plain", "n", "Yes", "off", "1:20", "123", "1.5", "true", "null", "~", "-", "- x", "a: b",
+		"#c", "x #y", "multi\nline", "trailing\n", " lead", "trail ", "'q'", `"dq"`, "{a}", "[1]",
+		"*ref", "&anc", "!tag", "%dir", "@at", "`bt", "0x1F", "0o17", ".inf", "2024-01-01", "é", "\t",
+	}
+	for _, v := range values {
+		want := &yaml.Node{}
+		if err := want.Encode(map[string]interface{}{"k": v}); err != nil {
+			t.Fatal(err)
+		}
+		wantOut, err := yaml.Marshal(want)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var buf bytes.Buffer
+		if err := (&YAMLWriter{Out: &buf}).Write(map[string]interface{}{"k": v}); err != nil {
+			t.Fatal(err)
+		}
+		if buf.String() != string(wantOut) {
+			t.Errorf("%#v: got %q, want %q", v, buf.String(), wantOut)
+		}
+	}
+}

@@ -260,7 +260,10 @@ handlers:
     # Each key becomes a field in the output object.
     # Values are either a jq expression string or a sub-handler reference.
     # Values can also be inline nested objects (see "Field type 2" below).
-    # Output object keys are sorted alphabetically, not in config order.
+    # Output object keys appear in the order they are listed here (also for
+    # inline objects and sub-handlers). Objects built by jq expressions, e.g.
+    # "{b: .x, a: .y}", are written with their keys sorted. Duplicate field
+    # names are an error.
     fields:
 
       # -----------------------------------------------------------------------

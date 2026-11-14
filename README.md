@@ -349,27 +349,27 @@ handlers:
       code: ".country_code | ascii_upcase"
 ```
 
-Output (keys are sorted alphabetically):
+Output (fields appear in config order):
 
 ```json
 [
   {
+    "id": 1,
+    "title": "peak district walk",
     "date": "15/03/2024",
     "distance_km": 13.68,
-    "id": 1,
-    "location": {
-      "country": {
-        "code": "GB",
-        "name": "England"
-      },
-      "name": "Derbyshire",
-      "slug": "derbyshire"
-    },
     "tags": [
       "HIKING",
       "HILLS"
     ],
-    "title": "peak district walk"
+    "location": {
+      "name": "Derbyshire",
+      "slug": "derbyshire",
+      "country": {
+        "name": "England",
+        "code": "GB"
+      }
+    }
   }
 ]
 ```
