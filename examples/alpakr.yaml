@@ -10,6 +10,25 @@ version: "1"
 
 
 # =============================================================================
+# Environment variables
+# =============================================================================
+# Source settings (path, url, method, headers values, body, timeout) and
+# output.file may reference environment variables, so secrets and
+# per-environment values stay out of the config file:
+#   ${VAR}            value of VAR — an error if VAR is not set
+#   ${VAR:-default}   default when VAR is unset or empty (default may be empty)
+#   $$                a literal $ (so $${VAR} yields the text ${VAR})
+# Any other $ is left as-is (e.g. GraphQL "$id" in a body).
+# Example:
+#   url: https://${API_HOST:-api.example.com}/v1/items
+#   headers:
+#     Authorization: "Bearer ${API_TOKEN}"
+#
+# jq expressions can read the environment directly: $ENV.API_REGION or
+# env.API_REGION.
+
+
+# =============================================================================
 # source (single-source configs)
 # =============================================================================
 # The default source used by any handler that does not specify a 'source:' key.

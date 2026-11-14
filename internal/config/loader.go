@@ -23,6 +23,9 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("parsing config: %w", err)
 	}
 
+	if err := expandConfigEnv(&cfg); err != nil {
+		return nil, err
+	}
 	if err := validate(&cfg, path); err != nil {
 		return nil, err
 	}

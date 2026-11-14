@@ -527,3 +527,21 @@ func TestRun_SelfReferenceFailsCleanly(t *testing.T) {
 		t.Errorf("depth error should not repeat the path per level: %d bytes", len(err.Error()))
 	}
 }
+
+func TestRun_JQEnvironment(t *testing.T) {
+	t.Setenv("ALPAKR_REGION", "eu")
+	e := mustEngine(t, cfg(map[string]config.HandlerConfig{
+		"root": {Fields: map[string]config.FieldConfig{
+			"a": field("$ENV.ALPAKR_REGION"),
+			"b": field("env.ALPAKR_REGION"),
+		}},
+	}))
+	got, err := e.Run("root", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]interface{}{"a": "eu", "b": "eu"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %#v, want %#v", got, want)
+	}
+}
