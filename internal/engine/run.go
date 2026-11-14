@@ -7,8 +7,8 @@ import (
 	"github.com/suprbdev/alpakr/internal/record"
 )
 
-// Run processes data through the named handler and returns the result.
-// Returns nil when the record is filtered out.
+// Run processes data through the named handler, sequentially, and returns
+// the result. Returns nil when the record is filtered out.
 func (e *Engine) Run(handlerName string, data interface{}) (interface{}, error) {
 	h, ok := e.handlers[handlerName]
 	if !ok {
@@ -18,13 +18,14 @@ func (e *Engine) Run(handlerName string, data interface{}) (interface{}, error) 
 }
 
 // RunLimit is like Run, but an 'each' handler stops once limit records have
-// been produced. limit <= 0 means no limit.
+// been produced (limit <= 0 means no limit), and its records are spread over
+// the engine's workers (see WithWorkers).
 func (e *Engine) RunLimit(handlerName string, data interface{}, limit int) (interface{}, error) {
 	h, ok := e.handlers[handlerName]
 	if !ok {
 		return nil, fmt.Errorf("handler %q not found", handlerName)
 	}
-	return h.run(data, limit, 0)
+	return h.runTop(data, limit, e.workers)
 }
 
 // maxDepth bounds nested handler calls so a handler that references itself
@@ -45,24 +46,53 @@ func (h *compiledHandler) run(data interface{}, limit, depth int) (interface{}, 
 	if depth > maxDepth {
 		return nil, &depthError{handler: h.name}
 	}
+	items, single, err := h.prepare(data, depth)
+	if err != nil || items == nil {
+		return single, err
+	}
+	return h.runItems(items, limit, depth)
+}
+
+// runTop runs an entry handler, spreading 'each' records over workers.
+func (h *compiledHandler) runTop(data interface{}, limit, workers int) (interface{}, error) {
+	items, single, err := h.prepare(data, 0)
+	if err != nil || items == nil {
+		return single, err
+	}
+	if workers > 1 && len(items) >= 2*parallelChunk {
+		return h.runItemsParallel(items, limit, workers)
+	}
+	return h.runItems(items, limit, 0)
+}
+
+// prepare applies the input selector. For an 'each' handler it returns the
+// items to iterate; otherwise (or for null input) it returns the finished
+// result as single.
+func (h *compiledHandler) prepare(data interface{}, depth int) (items []interface{}, single interface{}, err error) {
 	if h.input != nil {
-		var err error
 		data, err = h.input.eval(data)
 		if err != nil {
-			return nil, fmt.Errorf("handler %q input: %w", h.name, err)
+			return nil, nil, fmt.Errorf("handler %q input: %w", h.name, err)
 		}
 	}
-
 	if !h.each {
-		return h.runOne(data, depth)
+		single, err = h.runOne(data, depth)
+		return nil, single, err
 	}
 	if data == nil {
-		return []interface{}{}, nil
+		return nil, []interface{}{}, nil
 	}
 	items, ok := data.([]interface{})
 	if !ok {
-		return nil, fmt.Errorf("handler %q: 'each: true' requires array input, got %s", h.name, jqType(data))
+		return nil, nil, fmt.Errorf("handler %q: 'each: true' requires array input, got %s", h.name, jqType(data))
 	}
+	if items == nil {
+		items = []interface{}{}
+	}
+	return items, nil, nil
+}
+
+func (h *compiledHandler) runItems(items []interface{}, limit, depth int) (interface{}, error) {
 	n := len(items)
 	if limit > 0 && limit < n {
 		n = limit

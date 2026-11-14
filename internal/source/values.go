@@ -138,6 +138,18 @@ func (y *yamlValues) Next() (interface{}, bool, error) {
 	return v, true, nil
 }
 
+// RawValues is implemented by inputs whose records can be read cheaply as
+// bytes and decoded separately, e.g. concurrently.
+type RawValues interface {
+	Values
+	// NextRaw returns the next record undecoded, with a position for error
+	// messages; ok is false once the input is exhausted.
+	NextRaw() (raw []byte, pos int, ok bool, err error)
+	// Decode decodes a record returned by NextRaw. It is safe for
+	// concurrent use.
+	Decode(raw []byte, pos int) (interface{}, error)
+}
+
 // maxLine is the longest NDJSON line accepted.
 const maxLine = 10 << 20
 
@@ -147,17 +159,43 @@ type ndjsonValues struct {
 }
 
 func (s *ndjsonValues) Next() (interface{}, bool, error) {
+	line, ok, err := s.scan()
+	if err != nil || !ok {
+		return nil, false, err
+	}
+	v, err := s.Decode(line, s.line)
+	if err != nil {
+		return nil, false, err
+	}
+	return v, true, nil
+}
+
+// NextRaw returns a copy of the next non-blank line and its line number.
+func (s *ndjsonValues) NextRaw() ([]byte, int, bool, error) {
+	line, ok, err := s.scan()
+	if err != nil || !ok {
+		return nil, 0, false, err
+	}
+	return append([]byte(nil), line...), s.line, true, nil
+}
+
+// Decode parses one line returned by NextRaw.
+func (s *ndjsonValues) Decode(line []byte, pos int) (interface{}, error) {
+	v, err := parseJSON(line)
+	if err != nil {
+		return nil, fmt.Errorf("ndjson line %d: %w", pos, err)
+	}
+	return v, nil
+}
+
+// scan returns the next non-blank line, trimmed; the slice is only valid
+// until the next call.
+func (s *ndjsonValues) scan() ([]byte, bool, error) {
 	for s.sc.Scan() {
 		s.line++
-		line := bytes.TrimSpace(s.sc.Bytes())
-		if len(line) == 0 {
-			continue
+		if line := bytes.TrimSpace(s.sc.Bytes()); len(line) > 0 {
+			return line, true, nil
 		}
-		v, err := parseJSON(line)
-		if err != nil {
-			return nil, false, fmt.Errorf("ndjson line %d: %w", s.line, err)
-		}
-		return v, true, nil
 	}
 	if err := s.sc.Err(); err != nil {
 		if errors.Is(err, bufio.ErrTooLong) {

@@ -53,6 +53,21 @@ func (w *JSONWriter) write(v interface{}, indent int) error {
 	return err
 }
 
+// EncodeLine appends the compact JSON line WriteOne(v) would write.
+func (w *JSONWriter) EncodeLine(dst []byte, v interface{}) ([]byte, error) {
+	dst, err := encodeJSON(dst, v)
+	if err != nil {
+		return nil, err
+	}
+	return append(dst, '\n'), nil
+}
+
+// WriteEncoded writes bytes produced by EncodeLine.
+func (w *JSONWriter) WriteEncoded(p []byte) error {
+	_, err := w.Out.Write(p)
+	return err
+}
+
 // encodeJSON appends the compact encoding of v to dst, retrying with NaN and
 // infinities replaced as jq prints them (null and ±1.7976931348623157e+308)
 // if JSON rejects them.

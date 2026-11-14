@@ -15,6 +15,17 @@ type Writer interface {
 	WriteOne(v interface{}) error
 }
 
+// LineEncoder is implemented by writers whose streamed records are
+// independent lines, so records can be encoded concurrently and written in
+// order afterwards.
+type LineEncoder interface {
+	// EncodeLine appends to dst exactly what WriteOne(v) would write. It
+	// does not touch the writer's state and is safe for concurrent use.
+	EncodeLine(dst []byte, v interface{}) ([]byte, error)
+	// WriteEncoded writes bytes produced by EncodeLine.
+	WriteEncoded(p []byte) error
+}
+
 // CheckFormat reports whether format is a supported output format.
 func CheckFormat(format string) error {
 	switch strings.ToLower(format) {
@@ -77,6 +88,21 @@ func (w *NDJSONWriter) Write(v interface{}) error {
 		return nil
 	}
 	return w.WriteOne(v)
+}
+
+// EncodeLine appends the lines WriteOne(v) would write.
+func (w *NDJSONWriter) EncodeLine(dst []byte, v interface{}) ([]byte, error) {
+	a, ok := v.([]interface{})
+	if !ok {
+		return w.JSONWriter.EncodeLine(dst, v)
+	}
+	var err error
+	for _, e := range a {
+		if dst, err = w.JSONWriter.EncodeLine(dst, e); err != nil {
+			return nil, err
+		}
+	}
+	return dst, nil
 }
 
 // WriteOne writes a streamed record: an array result (from an 'each'

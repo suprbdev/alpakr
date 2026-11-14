@@ -652,3 +652,59 @@ func TestCompile_UndefinedVar(t *testing.T) {
 		t.Errorf("err = %v, want undefined variable error", err)
 	}
 }
+
+func TestRunLimit_ParallelMatchesSequential(t *testing.T) {
+	c := cfg(map[string]config.HandlerConfig{
+		"root": {
+			Each:   true,
+			Filter: ".i % 3 != 0",
+			Fields: fields("i", field(".i"), "sq", field(".i * .i"), "sub", subHandler("sub", ".")),
+		},
+		"sub": {Fields: fields("s", field(`"n\(.i)"`))},
+	})
+	seq := mustEngine(t, c)
+	par, err := New(c, WithWorkers(8))
+	if err != nil {
+		t.Fatal(err)
+	}
+	items := make([]interface{}, 5000)
+	for i := range items {
+		items[i] = map[string]interface{}{"i": i}
+	}
+	for _, limit := range []int{0, 1, 300, 3333, 10000} {
+		want, err := runLimitPlain(seq, "root", items, limit)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := runLimitPlain(par, "root", items, limit)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("limit %d: parallel result differs (len %d vs %d)", limit, len(got.([]interface{})), len(want.([]interface{})))
+		}
+	}
+}
+
+func TestRunLimit_ParallelReportsFirstError(t *testing.T) {
+	c := cfg(map[string]config.HandlerConfig{
+		"root": {Each: true, Fields: fields("x", field(".x | ascii_upcase"))},
+	})
+	par, err := New(c, WithWorkers(8))
+	if err != nil {
+		t.Fatal(err)
+	}
+	items := make([]interface{}, 4000)
+	for i := range items {
+		items[i] = map[string]interface{}{"x": "ok"}
+	}
+	items[3900] = map[string]interface{}{"x": 2}
+	items[700] = map[string]interface{}{"x": 1}
+	_, err = par.RunLimit("root", items, 0)
+	if err == nil || !strings.Contains(err.Error(), "(1)") {
+		t.Errorf("err = %v, want the error from record 700", err)
+	}
+	if _, err := par.RunLimit("root", items, 500); err != nil {
+		t.Errorf("records past the limit should not fail the run: %v", err)
+	}
+}

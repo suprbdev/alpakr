@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 
@@ -21,6 +22,7 @@ var (
 	handlerName  string
 	limitRecords int
 	readStdin    bool
+	workers      int
 )
 
 var errLimitReached = errors.New("limit reached")
@@ -35,6 +37,7 @@ func init() {
 	runCmd.Flags().StringVar(&handlerName, "handler", "", "entry-point handler name (defaults to 'root' if it exists)")
 	runCmd.Flags().IntVar(&limitRecords, "limit", 0, "maximum number of records to process (0 = no limit)")
 	runCmd.Flags().BoolVar(&readStdin, "stdin", false, "read input from stdin instead of the configured source")
+	runCmd.Flags().IntVar(&workers, "workers", 1, "records to process in parallel (0 = number of CPUs); output order is kept")
 	rootCmd.AddCommand(runCmd)
 }
 
@@ -71,7 +74,13 @@ func runRun(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	eng, err := engine.New(cfg, engine.WithVars(vars))
+	if workers < 0 {
+		return fmt.Errorf("--workers must be >= 0")
+	}
+	if workers == 0 {
+		workers = runtime.NumCPU()
+	}
+	eng, err := engine.New(cfg, engine.WithVars(vars), engine.WithWorkers(workers))
 	if err != nil {
 		return err
 	}
@@ -93,7 +102,7 @@ func runRun(_ *cobra.Command, _ []string) error {
 		if err != nil {
 			return err
 		}
-		pages.BeforeFetch = live.Flush
+		pages.BeforeFetch = live.BeforeInput
 		pages.Warn = func(msg string) { fmt.Fprintln(os.Stderr, "Warning:", msg) }
 		return process(cfg, eng, pages, true, live, nil)
 	}
@@ -175,7 +184,7 @@ func process(cfg *config.Config, eng *engine.Engine, vals source.Values, stream 
 		return err
 	}
 	if !ok {
-		return writeOutput(cfg, nil, func(output.Writer) error { return nil })
+		return writeOutput(cfg, nil, func(output.Writer, func() error) error { return nil })
 	}
 
 	var second interface{}
@@ -189,14 +198,23 @@ func process(cfg *config.Config, eng *engine.Engine, vals source.Values, stream 
 			if err != nil {
 				return err
 			}
-			return writeOutput(cfg, nil, func(w output.Writer) error { return w.Write(result) })
+			return writeOutput(cfg, nil, func(w output.Writer, _ func() error) error { return w.Write(result) })
 		}
 	}
 
 	if err := checkNotInput(inInfo, cfg.Output.File); err != nil {
 		return err
 	}
-	return writeOutput(cfg, live, func(w output.Writer) error {
+	pending := []interface{}{first}
+	if hasSecond {
+		pending = append(pending, second)
+	}
+	if workers > 1 {
+		return writeOutput(cfg, nil, func(w output.Writer, flush func() error) error {
+			return streamParallel(eng, handlerName, limitRecords, w, flush, live, pending, vals, workers)
+		})
+	}
+	return writeOutput(cfg, live, func(w output.Writer, _ func() error) error {
 		written := 0
 		emit := func(record interface{}) error {
 			remaining := 0
@@ -220,9 +238,11 @@ func process(cfg *config.Config, eng *engine.Engine, vals source.Values, stream 
 			}
 			return nil
 		}
-		err := emit(first)
-		if err == nil && hasSecond {
-			err = emit(second)
+		var err error
+		for _, v := range pending {
+			if err = emit(v); err != nil {
+				break
+			}
 		}
 		for err == nil {
 			var v interface{}
@@ -241,7 +261,7 @@ func process(cfg *config.Config, eng *engine.Engine, vals source.Values, stream 
 // writeOutput opens the configured output, runs write against it and
 // flushes. When live is non-nil it is pointed at the output for the
 // duration, so streamed results are flushed while waiting on slow input.
-func writeOutput(cfg *config.Config, live *liveOutput, write func(output.Writer) error) (err error) {
+func writeOutput(cfg *config.Config, live *liveOutput, write func(w output.Writer, flush func() error) error) (err error) {
 	sink, err := openSink(cfg.Output.File)
 	if err != nil {
 		return err
@@ -259,7 +279,7 @@ func writeOutput(cfg *config.Config, live *liveOutput, write func(output.Writer)
 	if err != nil {
 		return err
 	}
-	return write(w)
+	return write(w, (&liveOutput{w: sink.buf}).Flush)
 }
 
 // checkNotInput refuses to stream into the file being read: creating the
@@ -313,8 +333,21 @@ func (s *sink) Close() error {
 }
 
 // liveOutput is the buffered output currently being streamed to, if any.
+// BeforeInput runs before every input read or page fetch.
 type liveOutput struct {
 	w *bufio.Writer
+	// beforeInput, when set, replaces the default flush in BeforeInput.
+	beforeInput func() error
+}
+
+// BeforeInput is called before alpakr may block waiting for input: it
+// flushes buffered output so results are not held back, or runs
+// beforeInput if one is set.
+func (l *liveOutput) BeforeInput() error {
+	if l.beforeInput != nil {
+		return l.beforeInput()
+	}
+	return l.Flush()
 }
 
 // Flush writes buffered output, if an output is open.
@@ -328,16 +361,16 @@ func (l *liveOutput) Flush() error {
 	return nil
 }
 
-// flushingReader flushes out before every read from r. Streaming output is
-// therefore batched while input is plentiful, yet never held back while the
-// process waits on a slow or live input such as `tail -f`.
+// flushingReader calls out.BeforeInput before every read from r. Streaming
+// output is therefore batched while input is plentiful, yet never held back
+// while the process waits on a slow or live input such as `tail -f`.
 type flushingReader struct {
 	r   io.Reader
 	out *liveOutput
 }
 
 func (f *flushingReader) Read(p []byte) (int, error) {
-	if err := f.out.Flush(); err != nil {
+	if err := f.out.BeforeInput(); err != nil {
 		return 0, err
 	}
 	return f.r.Read(p)

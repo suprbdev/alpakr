@@ -281,6 +281,14 @@ output:
 # Default:       if a handler named 'root' exists, it is used automatically.
 #                Otherwise --handler is required.
 #
+# Parallelism: alpakr run --workers N   (0 = number of CPUs; default 1)
+#   Records of an 'each: true' entry handler, and streamed records (ndjson,
+#   csv, multi-value input, paginated sources), are transformed on N
+#   goroutines. Output order, --limit and error reporting are the same as
+#   with one worker. NDJSON lines are also decoded in parallel, so large
+#   ndjson files scale best; a single large JSON/YAML document is still
+#   parsed on one core.
+#
 # Limit records: alpakr run --limit 10
 #   Stops after writing 10 output records. Filtered-out records do not count
 #   toward the limit. Works for all source types including ndjson streaming.
