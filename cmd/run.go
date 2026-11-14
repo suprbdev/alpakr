@@ -98,7 +98,13 @@ func openInput(srcCfg config.SourceConfig, fromStdin bool) (io.ReadCloser, error
 	case fromStdin:
 		return io.NopCloser(os.Stdin), nil
 	case srcCfg.URL != "":
-		return (&source.URLSource{URL: srcCfg.URL, Method: srcCfg.Method, Headers: srcCfg.Headers, Body: srcCfg.Body}).Open()
+		return (&source.URLSource{
+			URL:     srcCfg.URL,
+			Method:  srcCfg.Method,
+			Headers: srcCfg.Headers,
+			Body:    srcCfg.Body,
+			Timeout: srcCfg.TimeoutDuration(),
+		}).Open()
 	}
 	f, err := os.Open(srcCfg.Path)
 	if err != nil {

@@ -7,6 +7,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -111,6 +112,15 @@ func validateSourceConfig(label string, s SourceConfig) error {
 		}
 		if s.Body != "" {
 			return fmt.Errorf("config: %s: 'body' requires 'url'", label)
+		}
+		if s.Timeout != "" {
+			return fmt.Errorf("config: %s: 'timeout' requires 'url'", label)
+		}
+	}
+	if s.Timeout != "" {
+		d, err := time.ParseDuration(s.Timeout)
+		if err != nil || d < 0 {
+			return fmt.Errorf("config: %s: 'timeout' must be a non-negative duration such as 30s or 2m (got %q)", label, s.Timeout)
 		}
 	}
 	if s.Body != "" {

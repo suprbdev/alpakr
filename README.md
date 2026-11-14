@@ -53,6 +53,7 @@ source:
   #   Authorization: "Bearer <token>"
   #   Accept: "application/json"
   # body: '{"filter":"active"}'  # request body — requires method POST, PUT, or PATCH
+  # timeout: 30s              # max wait for headers / each body read (default 30s; "0" = none)
 
 output:
   format: json                # json | yaml (default: json)

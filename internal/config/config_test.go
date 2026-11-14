@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestFieldConfigUnmarshalYAML_Expr(t *testing.T) {
@@ -447,6 +448,44 @@ func TestDetectFormat(t *testing.T) {
 		detectFormat(&s)
 		if s.Format != tc.want {
 			t.Errorf("detectFormat(%+v) = %q, want %q", tc.src, s.Format, tc.want)
+		}
+	}
+}
+
+func TestURLOptions_Timeout(t *testing.T) {
+	cfg := mustLoad(t, `
+version: "1"
+sources:
+  a:
+    url: http://example.com/a.json
+    timeout: 2m
+  b:
+    url: http://example.com/b.json
+  c:
+    url: http://example.com/c.json
+    timeout: "0"
+handlers:
+  root:
+    source: a
+    fields:
+      id: ".id"
+`)
+	for name, want := range map[string]time.Duration{"a": 2 * time.Minute, "b": DefaultTimeout, "c": 0} {
+		if got := cfg.Sources[name].TimeoutDuration(); got != want {
+			t.Errorf("sources.%s timeout = %s, want %s", name, got, want)
+		}
+	}
+}
+
+func TestURLOptions_TimeoutInvalid(t *testing.T) {
+	for name, src := range map[string]string{
+		"not a duration": "  url: http://example.com/x.json\n  timeout: soon\n",
+		"negative":       "  url: http://example.com/x.json\n  timeout: -1s\n",
+		"bare number":    "  url: http://example.com/x.json\n  timeout: 30\n",
+		"path source":    "  path: /tmp/x.json\n  timeout: 30s\n",
+	} {
+		if _, err := loadString(t, "version: \"1\"\nsource:\n"+src+"handlers:\n  root:\n    fields:\n      id: \".id\"\n"); err == nil {
+			t.Errorf("%s: expected error", name)
 		}
 	}
 }
