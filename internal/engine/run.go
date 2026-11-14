@@ -11,10 +11,20 @@ func (e *Engine) Run(handlerName string, data interface{}) (interface{}, error) 
 	if !ok {
 		return nil, fmt.Errorf("handler %q not found", handlerName)
 	}
-	return h.run(data)
+	return h.run(data, 0)
 }
 
-func (h *compiledHandler) run(data interface{}) (interface{}, error) {
+// RunLimit is like Run, but an 'each' handler stops once limit records have
+// been produced. limit <= 0 means no limit.
+func (e *Engine) RunLimit(handlerName string, data interface{}, limit int) (interface{}, error) {
+	h, ok := e.handlers[handlerName]
+	if !ok {
+		return nil, fmt.Errorf("handler %q not found", handlerName)
+	}
+	return h.run(data, limit)
+}
+
+func (h *compiledHandler) run(data interface{}, limit int) (interface{}, error) {
 	if h.input != nil {
 		var err error
 		data, err = h.input.eval(data)
@@ -30,7 +40,11 @@ func (h *compiledHandler) run(data interface{}) (interface{}, error) {
 	if !ok {
 		return nil, fmt.Errorf("handler %q: 'each: true' requires array input, got %T", h.name, data)
 	}
-	results := make([]interface{}, 0, len(items))
+	n := len(items)
+	if limit > 0 && limit < n {
+		n = limit
+	}
+	results := make([]interface{}, 0, n)
 	for _, item := range items {
 		out, err := h.runOne(item)
 		if err != nil {
@@ -38,6 +52,9 @@ func (h *compiledHandler) run(data interface{}) (interface{}, error) {
 		}
 		if out != nil {
 			results = append(results, out)
+			if len(results) == limit {
+				break
+			}
 		}
 	}
 	return results, nil
@@ -91,7 +108,7 @@ func (f *compiledField) eval(data interface{}) (interface{}, error) {
 	}
 
 	if f.handler != nil {
-		val, err := f.handler.run(data)
+		val, err := f.handler.run(data, 0)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", f.path, err)
 		}

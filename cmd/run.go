@@ -159,15 +159,9 @@ func runBatch(cfg *config.Config, eng *engine.Engine, srcCfg config.SourceConfig
 	if err != nil {
 		return err
 	}
-	result, err := eng.Run(handlerName, data)
+	result, err := eng.RunLimit(handlerName, data, limitRecords)
 	if err != nil {
 		return err
-	}
-
-	if limitRecords > 0 {
-		if arr, ok := result.([]interface{}); ok && len(arr) > limitRecords {
-			result = arr[:limitRecords]
-		}
 	}
 
 	sink, err := openSink(cfg.Output.File)

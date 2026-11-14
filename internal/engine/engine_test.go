@@ -464,3 +464,53 @@ func TestRun_ErrorPaths(t *testing.T) {
 		t.Errorf("err = %v, want prefix root.loc.city:", err)
 	}
 }
+
+func TestRunLimit(t *testing.T) {
+	e := mustEngine(t, cfg(map[string]config.HandlerConfig{
+		"root": {
+			Each:   true,
+			Filter: ".keep",
+			Fields: map[string]config.FieldConfig{"id": field(".id")},
+		},
+	}))
+	var items []interface{}
+	for i := 0; i < 10; i++ {
+		items = append(items, map[string]interface{}{"id": i, "keep": i%2 == 1})
+	}
+	for _, tc := range []struct {
+		limit int
+		want  []interface{}
+	}{
+		{0, []interface{}{1, 3, 5, 7, 9}},
+		{2, []interface{}{1, 3}},
+		{100, []interface{}{1, 3, 5, 7, 9}},
+	} {
+		got, err := e.RunLimit("root", items, tc.limit)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var ids []interface{}
+		for _, r := range got.([]interface{}) {
+			ids = append(ids, r.(map[string]interface{})["id"])
+		}
+		if !reflect.DeepEqual(ids, tc.want) {
+			t.Errorf("limit %d: ids = %v, want %v", tc.limit, ids, tc.want)
+		}
+	}
+}
+
+func TestRunLimit_StopsEarly(t *testing.T) {
+	e := mustEngine(t, cfg(map[string]config.HandlerConfig{
+		"root": {Each: true, Fields: map[string]config.FieldConfig{"x": field(".x | ascii_upcase")}},
+	}))
+	items := []interface{}{
+		map[string]interface{}{"x": "a"},
+		map[string]interface{}{"x": 1},
+	}
+	if _, err := e.RunLimit("root", items, 1); err != nil {
+		t.Errorf("record past the limit was evaluated: %v", err)
+	}
+	if _, err := e.RunLimit("root", items, 0); err == nil {
+		t.Error("expected error from second record without limit")
+	}
+}
