@@ -1,0 +1,27 @@
+# Demonstrates:
+#   - csv source: one record per row, keyed by the header row
+#   - every CSV cell is a string — convert with to_int / to_float / tonumber
+#   - empty cells are "" (use `select(. != "")` or `// null` patterns)
+#   - csv output: columns follow the field order below
+#
+# Run:
+#   alpakr run -c examples/csv/alpakr.yaml              # NDJSON-style JSON lines
+#   alpakr run -c examples/csv/alpakr.yaml -f csv       # back to CSV
+
+version: "1"
+
+source:
+  path: ./data/people.csv   # format auto-detected from .csv (.tsv → tab-delimited)
+
+vars:
+  min_score: 80
+
+handlers:
+  root:
+    filter: '.active == "true" and (.score | tonumber) >= $min_score'
+    fields:
+      id:     ".id | to_int"
+      name:   '.first_name + " " + .last_name'
+      email:  'if .email == "" then null else .email end'
+      joined: '.joined | strptime("%Y-%m-%d") | strftime("%d %b %Y")'
+      score:  ".score | to_float | round2"

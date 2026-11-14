@@ -881,3 +881,51 @@ func TestValidate_UsesArgs(t *testing.T) {
 	}
 	runWithArgs(t, "validate", "-c", cfgFile, "--arg", "region=eu")
 }
+
+func TestRun_CSVSourceStreamsRows(t *testing.T) {
+	dataFile := writeTemp(t, "people.csv", "id,name,age\n1,Ann,30\n2,Bob,\n3,Cy,41\n")
+	cfgFile := writeTemp(t, "alpakr.yaml", `
+version: "1"
+source:
+  path: `+dataFile+`
+handlers:
+  root:
+    filter: '.age != ""'
+    fields:
+      id: ".id | to_int"
+      name: ".name"
+      age: ".age | tonumber"
+`)
+	want := "{\"id\":1,\"name\":\"Ann\",\"age\":30}\n{\"id\":3,\"name\":\"Cy\",\"age\":41}\n"
+	if got := runWithArgs(t, "run", "-c", cfgFile); got != want {
+		t.Errorf("output = %q", got)
+	}
+	if got := runWithStdin(t, "id,name,age\n9,Zed,1\n", "run", "-c", cfgFile, "--stdin", "--limit", "1"); got != "{\"id\":9,\"name\":\"Zed\",\"age\":1}\n" {
+		t.Errorf("--stdin keeps csv format: %q", got)
+	}
+}
+
+func TestRun_CSVOutput(t *testing.T) {
+	dataFile := writeTemp(t, "data.json", `[{"id":1,"n":"a, b","tags":["x"]},{"id":2,"n":"c","tags":[]}]`)
+	cfgFile := writeTemp(t, "alpakr.yaml", `
+version: "1"
+source:
+  path: `+dataFile+`
+output:
+  format: csv
+handlers:
+  root:
+    each: true
+    fields:
+      name: ".n"
+      id: ".id"
+      tags: ".tags"
+`)
+	want := "name,id,tags\n\"a, b\",1,\"[\"\"x\"\"]\"\nc,2,[]\n"
+	if got := runWithArgs(t, "run", "-c", cfgFile); got != want {
+		t.Errorf("output = %q, want %q", got, want)
+	}
+	if got := runWithArgs(t, "run", "-c", cfgFile, "--limit", "1"); got != "name,id,tags\n\"a, b\",1,\"[\"\"x\"\"]\"\n" {
+		t.Errorf("limited output = %q", got)
+	}
+}

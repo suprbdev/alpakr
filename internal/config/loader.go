@@ -61,9 +61,12 @@ func validate(cfg *Config, configPath string) error {
 		return fmt.Errorf("config: output.indent must be >= 0")
 	}
 	switch strings.ToLower(cfg.Output.Format) {
-	case "", "json", "yaml", "yml", "ndjson", "jsonl":
+	case "", "json", "yaml", "yml", "ndjson", "jsonl", "csv":
 	default:
-		return fmt.Errorf("config: output.format must be json, yaml or ndjson (got %q)", cfg.Output.Format)
+		return fmt.Errorf("config: output.format must be json, yaml, ndjson or csv (got %q)", cfg.Output.Format)
+	}
+	if err := checkDelimiter("output", cfg.Output.Delimiter); err != nil {
+		return err
 	}
 	for name := range cfg.Vars {
 		if err := CheckVarName(name); err != nil {
@@ -112,9 +115,17 @@ func validateSourceConfig(label string, s SourceConfig) error {
 		return fmt.Errorf("config: %s cannot have both 'path' and 'url'", label)
 	}
 	switch strings.ToLower(s.Format) {
-	case "", "json", "yaml", "yml", "ndjson":
+	case "", "json", "yaml", "yml", "ndjson", "csv":
 	default:
-		return fmt.Errorf("config: %s: unknown format %q (want json, yaml or ndjson)", label, s.Format)
+		return fmt.Errorf("config: %s: unknown format %q (want json, yaml, ndjson or csv)", label, s.Format)
+	}
+	if s.Delimiter != "" || s.Header != nil {
+		if f, _ := effectiveFormat(s); f != "csv" {
+			return fmt.Errorf("config: %s: 'delimiter' and 'header' require format csv", label)
+		}
+	}
+	if err := checkDelimiter(label, s.Delimiter); err != nil {
+		return err
 	}
 	if s.URL == "" {
 		if len(s.Headers) > 0 {
@@ -171,10 +182,31 @@ func normaliseSource(s *SourceConfig) {
 }
 
 func detectFormat(s *SourceConfig) {
-	if s.Format != "" {
-		return
+	format, detected := effectiveFormat(*s)
+	s.Format, s.FormatDetected = format, detected
+	if detected && s.Delimiter == "" && strings.EqualFold(extension(*s), ".tsv") {
+		s.Delimiter = "\t"
 	}
-	s.FormatDetected = true
+}
+
+// effectiveFormat returns the source's format: the configured one, or the
+// one implied by its path or URL extension (json if unrecognised).
+func effectiveFormat(s SourceConfig) (format string, detected bool) {
+	if s.Format != "" {
+		return strings.ToLower(s.Format), false
+	}
+	switch strings.ToLower(extension(s)) {
+	case ".yaml", ".yml":
+		return "yaml", true
+	case ".ndjson", ".jsonl":
+		return "ndjson", true
+	case ".csv", ".tsv":
+		return "csv", true
+	}
+	return "json", true
+}
+
+func extension(s SourceConfig) string {
 	ext := filepath.Ext(s.Path)
 	if s.URL != "" {
 		ext = path.Ext(s.URL)
@@ -182,14 +214,7 @@ func detectFormat(s *SourceConfig) {
 			ext = path.Ext(u.Path)
 		}
 	}
-	switch strings.ToLower(ext) {
-	case ".yaml", ".yml":
-		s.Format = "yaml"
-	case ".ndjson", ".jsonl":
-		s.Format = "ndjson"
-	default:
-		s.Format = "json"
-	}
+	return ext
 }
 
 // SourceFor returns the SourceConfig that applies to the named handler.

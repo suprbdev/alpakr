@@ -25,9 +25,9 @@ var (
 var rootCmd = &cobra.Command{
 	Use:   "alpakr",
 	Short: "YAML-configured data transformation tool",
-	Long: `alpakr reads data from a file, URL or stdin, applies YAML-configured
-handler pipelines to transform and restructure it, and outputs
-JSON or YAML to stdout or a file.`,
+	Long: `alpakr reads JSON, YAML, NDJSON or CSV from a file, URL or stdin,
+applies YAML-configured handler pipelines to transform and restructure it,
+and outputs JSON, YAML, NDJSON or CSV to stdout or a file.`,
 	SilenceErrors: true,
 	PersistentPreRun: func(cmd *cobra.Command, _ []string) {
 		cmd.SilenceUsage = true
@@ -48,6 +48,6 @@ func Execute() {
 
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&configPath, "config", "c", resolveConfigPath(), "path to config file (default: alpakr.yaml or alpakr.yml in current directory)")
-	rootCmd.PersistentFlags().StringVarP(&outputFormat, "format", "f", "", "output format override (json|yaml|ndjson)")
+	rootCmd.PersistentFlags().StringVarP(&outputFormat, "format", "f", "", "output format override (json|yaml|ndjson|csv)")
 	rootCmd.PersistentFlags().StringVarP(&outputFile, "output", "o", "", "output file path (default: stdout)")
 }

@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"strings"
 	"testing"
 
+	"github.com/suprbdev/alpakr/internal/record"
 	"gopkg.in/yaml.v3"
 )
 
@@ -202,5 +204,53 @@ func TestNDJSONWriter_WriteOneFlattensArrays(t *testing.T) {
 	}
 	if got := buf.String(); got != "1\n2\n{\"a\":1}\n" {
 		t.Errorf("got %q", got)
+	}
+}
+
+func TestCSVWriter(t *testing.T) {
+	var buf bytes.Buffer
+	w, err := New("CSV", 2, &buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keys := []string{"id", "name", "meta", "ok"}
+	recs := []interface{}{
+		&record.Object{Keys: keys, Values: []interface{}{1, "Ann, A", map[string]interface{}{"b": 1, "a": "<"}, true}},
+		nil,
+		&record.Object{Keys: keys, Values: []interface{}{big.NewInt(2), "say \"hi\"", []interface{}{1.5}, nil}},
+	}
+	if err := w.Write(recs); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.WriteOne(map[string]interface{}{"name": "Cy", "id": 3}); err != nil {
+		t.Fatal(err)
+	}
+	want := "id,name,meta,ok\n1,\"Ann, A\",\"{\"\"a\"\":\"\"<\"\",\"\"b\"\":1}\",true\n2,\"say \"\"hi\"\"\",[1.5],\n3,Cy,,\n"
+	if got := buf.String(); got != want {
+		t.Errorf("got  %q\nwant %q", got, want)
+	}
+}
+
+func TestCSVWriter_Errors(t *testing.T) {
+	w := NewCSVWriter(&bytes.Buffer{}, ';')
+	if err := w.WriteOne(map[string]interface{}{"a": 1}); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.WriteOne(map[string]interface{}{"a": 1, "z": 2}); err == nil || !strings.Contains(err.Error(), `"z" is not in the header`) {
+		t.Errorf("extra field: err = %v", err)
+	}
+	if err := w.WriteOne(42); err == nil {
+		t.Error("non-object record should error")
+	}
+}
+
+func TestCSVWriter_Delimiter(t *testing.T) {
+	var buf bytes.Buffer
+	w, _ := New("csv", 0, &buf, Delimiter('\t'))
+	if err := w.WriteOne(&record.Object{Keys: []string{"a", "b"}, Values: []interface{}{"x", 1}}); err != nil {
+		t.Fatal(err)
+	}
+	if buf.String() != "a\tb\nx\t1\n" {
+		t.Errorf("got %q", buf.String())
 	}
 }

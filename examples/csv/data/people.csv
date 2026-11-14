@@ -1,0 +1,5 @@
+id,first_name,last_name,email,joined,score,active
+1,Ada,Lovelace,ada@example.com,2023-01-15,91.5,true
+2,Alan,Turing,alan@example.com,2022-11-02,88,true
+3,Grace,Hopper,,2024-03-30,79.25,false
+4,Edsger,Dijkstra,edsger@example.com,2021-07-19,95,true

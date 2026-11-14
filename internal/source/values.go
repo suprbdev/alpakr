@@ -24,10 +24,16 @@ type Values interface {
 //   - "yaml" or "yml": one or more YAML documents separated by "---"
 //   - "ndjson": one JSON value per line; blank lines are skipped and
 //     errors report the line number
+//   - "csv": one object per row keyed by the header row (see CSVHeader and
+//     CSVDelimiter); every value is a string
 //   - "": json if the first non-space byte is '{' or '[', otherwise yaml
 //
 // A leading UTF-8 byte-order mark is ignored.
-func NewValues(r io.Reader, format string) (Values, error) {
+func NewValues(r io.Reader, format string, opts ...Option) (Values, error) {
+	var o options
+	for _, opt := range opts {
+		opt(&o)
+	}
 	br := bufio.NewReader(r)
 	if b, err := br.Peek(len(utf8BOM)); err == nil && bytes.Equal(b, utf8BOM) {
 		if _, err := br.Discard(len(utf8BOM)); err != nil {
@@ -51,6 +57,8 @@ func NewValues(r io.Reader, format string) (Values, error) {
 		sc := bufio.NewScanner(in)
 		sc.Buffer(make([]byte, 64*1024), maxLine)
 		return &ndjsonValues{sc: sc}, nil
+	case "csv":
+		return newCSVValues(in, o), nil
 	}
 	return nil, fmt.Errorf("unknown input format %q", format)
 }
