@@ -42,7 +42,7 @@ func runRun(_ *cobra.Command, _ []string) error {
 
 	// CLI flags override config
 	if outputFormat != "" {
-		cfg.Output.Format = outputFormat
+		cfg.Output.Format = strings.ToLower(outputFormat)
 	}
 	if outputFile != "" {
 		cfg.Output.File = outputFile
@@ -90,6 +90,9 @@ func runStream(cfg *config.Config, eng *engine.Engine, srcCfg config.SourceConfi
 	}
 	defer func() { _ = in.Close() }()
 
+	if err := checkNotInput(srcCfg, cfg.Output.File); err != nil {
+		return err
+	}
 	sink, err := openSink(cfg.Output.File)
 	if err != nil {
 		return err
@@ -107,9 +110,6 @@ func runStream(cfg *config.Config, eng *engine.Engine, srcCfg config.SourceConfi
 	ndjson := &source.NdjsonSource{Reader: &flushingReader{r: in, w: sink.buf}}
 	written := 0
 	err = ndjson.Stream(func(record interface{}) error {
-		if limitRecords > 0 && written >= limitRecords {
-			return errLimitReached
-		}
 		result, rerr := eng.Run(handlerName, record)
 		if rerr != nil {
 			return rerr
@@ -117,8 +117,14 @@ func runStream(cfg *config.Config, eng *engine.Engine, srcCfg config.SourceConfi
 		if result == nil {
 			return nil // filtered out
 		}
+		if werr := w.WriteOne(result); werr != nil {
+			return werr
+		}
 		written++
-		return w.WriteOne(result)
+		if limitRecords > 0 && written >= limitRecords {
+			return errLimitReached
+		}
+		return nil
 	})
 	if errors.Is(err, errLimitReached) {
 		return nil
@@ -140,6 +146,31 @@ func openStream(srcCfg config.SourceConfig) (io.ReadCloser, error) {
 		return nil, fmt.Errorf("opening ndjson file: %w", err)
 	}
 	return f, nil
+}
+
+// checkNotInput refuses to stream into the file being read: creating the
+// output would truncate the input before it is consumed.
+func checkNotInput(srcCfg config.SourceConfig, outPath string) error {
+	if outPath == "" {
+		return nil
+	}
+	outInfo, err := os.Stat(outPath)
+	if err != nil {
+		return nil
+	}
+	var inInfo os.FileInfo
+	switch {
+	case stdinIsPipe():
+		inInfo, err = os.Stdin.Stat()
+	case srcCfg.Path != "":
+		inInfo, err = os.Stat(srcCfg.Path)
+	default:
+		return nil
+	}
+	if err == nil && os.SameFile(inInfo, outInfo) {
+		return fmt.Errorf("output file %q is the input being streamed; write to a different file", outPath)
+	}
+	return nil
 }
 
 // runBatch loads the full source, runs the handler once and writes the result.

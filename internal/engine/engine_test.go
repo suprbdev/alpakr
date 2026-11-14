@@ -514,3 +514,16 @@ func TestRunLimit_StopsEarly(t *testing.T) {
 		t.Error("expected error from second record without limit")
 	}
 }
+
+func TestRun_SelfReferenceFailsCleanly(t *testing.T) {
+	e := mustEngine(t, cfg(map[string]config.HandlerConfig{
+		"root": {Fields: map[string]config.FieldConfig{"self": subHandler("root", "")}},
+	}))
+	_, err := e.Run("root", map[string]interface{}{})
+	if err == nil || !strings.Contains(err.Error(), "nested more than") {
+		t.Fatalf("err = %v, want depth error", err)
+	}
+	if len(err.Error()) > 200 {
+		t.Errorf("depth error should not repeat the path per level: %d bytes", len(err.Error()))
+	}
+}

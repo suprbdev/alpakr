@@ -45,7 +45,7 @@ source:
   # url: https://example.com/api/records.json
 
   # format: explicitly set the input format — json | yaml | ndjson
-  # (yml is an alias for yaml). Any other value is an error.
+  # (yml is an alias for yaml; case-insensitive). Any other value is an error.
   # Optional. Auto-detected from file extension if omitted (.json → json,
   # .yaml/.yml → yaml, .ndjson/.jsonl → ndjson).
   # Stdin: format auto-detected by peeking first byte ('{' or '[' → json,
@@ -118,7 +118,8 @@ source:
 # =============================================================================
 output:
   # format: output encoding — json | yaml (yml is an alias for yaml)
-  # Default: json. Any other value is an error. Overridden by --format / -f.
+  # Default: json. Case-insensitive; any other value is an error.
+  # Overridden by --format / -f.
   format: json
 
   # indent: number of spaces for JSON pretty-printing
@@ -126,7 +127,9 @@ output:
   # Has no effect on yaml output or ndjson streaming (always one line per record).
   indent: 2
 
-  # file: write output to a file instead of stdout
+  # file: write output to a file instead of stdout.
+  # When streaming an ndjson file, the output must not be that same file
+  # (alpakr refuses, since creating it would truncate the input).
   # Path is relative to this config file's directory.
   # Parent directories are created automatically if they do not exist.
   # Default: stdout (omit this key)
@@ -322,6 +325,9 @@ handlers:
       # Delegates this field's value to another handler. The referenced handler
       # is run against a sub-selection of the current record, and its output
       # becomes the field value.
+      #
+      # A handler may reference itself for tree-shaped data (e.g. children of
+      # children); nesting deeper than 1000 levels is an error.
       #
       # Use sub-handlers when the nested structure is shared across multiple
       # handlers and you want a single definition to avoid duplication.

@@ -4,6 +4,7 @@ package output
 import (
 	"fmt"
 	"io"
+	"strings"
 )
 
 // Writer encodes results to an underlying io.Writer.
@@ -16,7 +17,7 @@ type Writer interface {
 
 // CheckFormat reports whether format is a supported output format.
 func CheckFormat(format string) error {
-	switch format {
+	switch strings.ToLower(format) {
 	case "json", "yaml", "yml":
 		return nil
 	}
@@ -29,7 +30,7 @@ func New(format string, indent int, out io.Writer) (Writer, error) {
 	if err := CheckFormat(format); err != nil {
 		return nil, err
 	}
-	if format == "json" {
+	if strings.ToLower(format) == "json" {
 		return &JSONWriter{Indent: indent, Out: out}, nil
 	}
 	return &YAMLWriter{Out: out}, nil
