@@ -725,3 +725,25 @@ handlers:
 		t.Errorf("yaml = %q, want %q", got, want)
 	}
 }
+
+func TestRun_NdjsonOutputFormat(t *testing.T) {
+	dataFile := writeTemp(t, "data.json", `[{"id":1},{"id":2},{"id":3}]`)
+	cfgFile := writeTemp(t, "alpakr.yaml", `
+version: "1"
+source:
+  path: `+dataFile+`
+output:
+  format: ndjson
+handlers:
+  root:
+    each: true
+    fields:
+      id: ".id"
+`)
+	if got := runWithArgs(t, "run", "-c", cfgFile, "--limit", "2"); got != "{\"id\":1}\n{\"id\":2}\n" {
+		t.Errorf("output = %q", got)
+	}
+	if got := runWithArgs(t, "run", "-c", cfgFile, "-f", "json"); !strings.HasPrefix(got, "[\n") {
+		t.Errorf("-f json should override ndjson: %q", got)
+	}
+}

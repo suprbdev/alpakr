@@ -165,14 +165,24 @@ source:
 # output
 # =============================================================================
 output:
-  # format: output encoding — json | yaml (yml is an alias for yaml)
+  # format: output encoding — json | yaml | ndjson
+  # (yml is an alias for yaml, jsonl for ndjson).
+  #   json    one document; indented per 'indent'
+  #   yaml    one document
+  #   ndjson  one compact JSON value per line: an array result is written one
+  #           element per line, records rejected by a filter are omitted.
+  #           Handy for jq -c, log pipelines and bulk loaders.
+  # When the input is streamed (ndjson, or several JSON values / YAML
+  # documents), json writes one compact line per record and yaml writes a
+  # '---'-separated stream, so ndjson and json output look the same there.
   # Default: json. Case-insensitive; any other value is an error.
   # Overridden by --format / -f.
   format: json
 
   # indent: number of spaces for JSON pretty-printing
   # Default: 2. Set 0 for compact single-line JSON. Must be >= 0.
-  # Has no effect on yaml output or ndjson streaming (always one line per record).
+  # Has no effect on yaml or ndjson output, or on streamed input (always one
+  # line per record).
   indent: 2
 
   # file: write output to a file instead of stdout.
