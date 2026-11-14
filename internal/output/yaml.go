@@ -31,12 +31,14 @@ func (w *YAMLWriter) WriteOne(v interface{}) error {
 	return w.Write(v)
 }
 
-// yamlValue returns v with *big.Int values replaced by integer nodes; yaml.v3
-// would otherwise marshal them as quoted strings via encoding.TextMarshaler.
+// yamlValue returns v with *big.Int values replaced by plain scalar nodes;
+// yaml.v3 would otherwise marshal them as quoted strings via
+// encoding.TextMarshaler, and an explicit !!int tag on values beyond 64 bits
+// is emitted verbatim and rejected when read back.
 func yamlValue(v interface{}) interface{} {
 	switch x := v.(type) {
 	case *big.Int:
-		return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!int", Value: x.String()}
+		return &yaml.Node{Kind: yaml.ScalarNode, Value: x.String()}
 	case map[string]interface{}:
 		m := make(map[string]interface{}, len(x))
 		for k, e := range x {

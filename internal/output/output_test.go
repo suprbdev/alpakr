@@ -3,8 +3,11 @@ package output
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"math/big"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 func TestJSONWriter_NoHTMLEscape(t *testing.T) {
@@ -102,5 +105,36 @@ func TestWriters_BigInt(t *testing.T) {
 	}
 	if want := "a:\n    - 12345678901234567890\nid: 12345678901234567890\n"; ys.String() != want {
 		t.Errorf("yaml = %q, want %q", ys.String(), want)
+	}
+}
+
+func TestJSONWriter_NonFiniteFloats(t *testing.T) {
+	v := map[string]interface{}{"inf": math.Inf(1), "ninf": []interface{}{math.Inf(-1)}, "nan": math.NaN(), "ok": 1.5}
+	var buf bytes.Buffer
+	w := &JSONWriter{Out: &buf}
+	if err := w.Write(v); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.WriteOne(v); err != nil {
+		t.Fatal(err)
+	}
+	line := `{"inf":1.7976931348623157e+308,"nan":null,"ninf":[-1.7976931348623157e+308],"ok":1.5}` + "\n"
+	if buf.String() != line+line {
+		t.Errorf("got %q, want %q twice", buf.String(), line)
+	}
+}
+
+func TestYAMLWriter_HugeBigIntRoundTrips(t *testing.T) {
+	b, _ := new(big.Int).SetString("123456789012345678901234567890", 10)
+	var buf bytes.Buffer
+	if err := (&YAMLWriter{Out: &buf}).Write(map[string]interface{}{"id": b}); err != nil {
+		t.Fatal(err)
+	}
+	if buf.String() != "id: 123456789012345678901234567890\n" {
+		t.Errorf("got %q", buf.String())
+	}
+	var back map[string]interface{}
+	if err := yaml.Unmarshal(buf.Bytes(), &back); err != nil {
+		t.Errorf("output does not parse back: %v", err)
 	}
 }
