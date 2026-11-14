@@ -67,7 +67,11 @@ func runRun(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("handler %q not found in config; available: %s", handlerName, handlerNames(cfg))
 	}
 
-	eng, err := engine.New(cfg)
+	vars, err := buildVars(cfg)
+	if err != nil {
+		return err
+	}
+	eng, err := engine.New(cfg, engine.WithVars(vars))
 	if err != nil {
 		return err
 	}

@@ -16,10 +16,32 @@ version: "1"
 
 
 # =============================================================================
+# vars
+# =============================================================================
+# Named values available to every jq expression (fields, input, filter) as
+# $name — like jq --arg. Values may be any YAML value (string, number, list,
+# map); strings expand ${ENV} references (see below).
+# Names: letters, digits, underscores, not starting with a digit; ENV is
+# reserved. Referencing an undefined $name is a compile error.
+#
+# Override or add from the command line (strings / JSON values):
+#   alpakr run --arg region=eu --argjson limits='{"max": 10}'
+# --arg and --argjson take precedence over vars. 'alpakr validate' accepts the
+# same flags.
+vars:
+  region: uk
+  # min_score: 50
+  # api_env: ${API_ENV:-staging}
+#
+# Usage in a field:   label: '"\(.name) (\($region))"'
+# Usage in a filter:  filter: ".score >= $min_score"
+
+
+# =============================================================================
 # Environment variables
 # =============================================================================
-# Source settings (path, url, method, headers values, body, timeout) and
-# output.file may reference environment variables, so secrets and
+# Source settings (path, url, method, headers values, body, timeout), string
+# values in vars, and output.file may reference environment variables, so secrets and
 # per-environment values stay out of the config file:
 #   ${VAR}            value of VAR — an error if VAR is not set
 #   ${VAR:-default}   default when VAR is unset or empty (default may be empty)

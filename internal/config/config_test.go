@@ -608,3 +608,34 @@ handlers:
 		t.Errorf("e = %+v", e)
 	}
 }
+
+func TestVars(t *testing.T) {
+	t.Setenv("ALPAKR_REGION", "eu")
+	cfg := mustLoad(t, `
+version: "1"
+vars:
+  region: ${ALPAKR_REGION}
+  limit: 5
+  tags: [a, "${ALPAKR_REGION:-x}"]
+handlers:
+  root:
+    fields:
+      r: "$region"
+`)
+	if n := cfg.Vars["region"]; n.Value != "eu" {
+		t.Errorf("region = %q", n.Value)
+	}
+	tags := cfg.Vars["tags"]
+	if len(tags.Content) != 2 || tags.Content[1].Value != "eu" {
+		t.Errorf("tags = %+v", tags.Content)
+	}
+}
+
+func TestVars_InvalidNames(t *testing.T) {
+	for _, name := range []string{"ENV", "1x", "a-b"} {
+		_, err := loadString(t, "version: \"1\"\nvars:\n  "+name+": 1\nhandlers:\n  root:\n    fields:\n      a: \".a\"\n")
+		if err == nil {
+			t.Errorf("%s: expected error", name)
+		}
+	}
+}

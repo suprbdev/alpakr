@@ -39,7 +39,7 @@ type compiledField struct {
 
 // compileHandlers compiles every jq expression in handlers up front so that
 // invalid expressions are reported before any data is processed.
-func compileHandlers(handlers map[string]config.HandlerConfig, opts []gojq.CompilerOption) (map[string]*compiledHandler, error) {
+func compileHandlers(handlers map[string]config.HandlerConfig, c *compiler) (map[string]*compiledHandler, error) {
 	compiled := make(map[string]*compiledHandler, len(handlers))
 	for name, h := range handlers {
 		compiled[name] = &compiledHandler{name: name, each: h.Each}
@@ -48,22 +48,22 @@ func compileHandlers(handlers map[string]config.HandlerConfig, opts []gojq.Compi
 	for _, name := range sortedKeys(handlers) {
 		h, ch := handlers[name], compiled[name]
 		var err error
-		if ch.input, err = compileInput(h.Input, opts); err != nil {
+		if ch.input, err = c.input(h.Input); err != nil {
 			return nil, fmt.Errorf("handler %q input: %w", name, err)
 		}
 		if h.Filter != "" {
-			if ch.filter, err = compileExpr(h.Filter, opts); err != nil {
+			if ch.filter, err = c.expr(h.Filter); err != nil {
 				return nil, fmt.Errorf("handler %q filter: %w", name, err)
 			}
 		}
-		if ch.obj, err = compileFields(name, h.Fields, compiled, opts); err != nil {
+		if ch.obj, err = compileFields(name, h.Fields, compiled, c); err != nil {
 			return nil, err
 		}
 	}
 	return compiled, nil
 }
 
-func compileFields(path string, fields config.Fields, handlers map[string]*compiledHandler, opts []gojq.CompilerOption) (objectSpec, error) {
+func compileFields(path string, fields config.Fields, handlers map[string]*compiledHandler, c *compiler) (objectSpec, error) {
 	spec := objectSpec{keys: make([]string, 0, len(fields)), fields: make([]compiledField, 0, len(fields))}
 	seen := make(map[string]bool, len(fields))
 	for _, f := range fields {
@@ -79,20 +79,20 @@ func compileFields(path string, fields config.Fields, handlers map[string]*compi
 			if cf.handler = handlers[f.Handler]; cf.handler == nil {
 				return spec, fmt.Errorf("field %q: undefined handler %q", cf.path, f.Handler)
 			}
-			if cf.input, err = compileInput(f.Input, opts); err != nil {
+			if cf.input, err = c.input(f.Input); err != nil {
 				return spec, fmt.Errorf("field %q input: %w", cf.path, err)
 			}
 		case f.Fields != nil:
-			if cf.input, err = compileInput(f.Input, opts); err != nil {
+			if cf.input, err = c.input(f.Input); err != nil {
 				return spec, fmt.Errorf("field %q input: %w", cf.path, err)
 			}
-			nested, err := compileFields(cf.path, f.Fields, handlers, opts)
+			nested, err := compileFields(cf.path, f.Fields, handlers, c)
 			if err != nil {
 				return spec, err
 			}
 			cf.obj = &nested
 		case f.Expr != "":
-			if cf.code, err = compileExpr(f.Expr, opts); err != nil {
+			if cf.code, err = c.expr(f.Expr); err != nil {
 				return spec, fmt.Errorf("field %q: %w", cf.path, err)
 			}
 		default:
@@ -109,16 +109,45 @@ func compileFields(path string, fields config.Fields, handlers map[string]*compi
 type expr struct {
 	code *gojq.Code
 	path []string
+	vars []interface{} // values of the compiler's variables, in declaration order
 }
 
 var plainPath = regexp.MustCompile(`^(\.[A-Za-z_][A-Za-z0-9_]*)+$`)
 
-// compileInput compiles an input selector, returning nil for the identity.
-func compileInput(src string, opts []gojq.CompilerOption) (*expr, error) {
+// compiler compiles expressions with the custom functions and the named
+// variables shared by every expression.
+type compiler struct {
+	opts []gojq.CompilerOption
+	vars []interface{}
+}
+
+func newCompiler(vars map[string]interface{}) *compiler {
+	names := sortedKeys(vars)
+	c := &compiler{opts: customFunctions(), vars: make([]interface{}, len(names))}
+	jqNames := make([]string, len(names))
+	for i, name := range names {
+		jqNames[i] = "$" + name
+		c.vars[i] = vars[name]
+	}
+	c.opts = append(c.opts, gojq.WithVariables(jqNames))
+	return c
+}
+
+func (c *compiler) expr(src string) (*expr, error) {
+	x, err := compileExpr(src, c.opts)
+	if err != nil {
+		return nil, err
+	}
+	x.vars = c.vars
+	return x, nil
+}
+
+// input compiles an input selector, returning nil for the identity.
+func (c *compiler) input(src string) (*expr, error) {
 	if src == "" || src == "." {
 		return nil, nil
 	}
-	return compileExpr(src, opts)
+	return c.expr(src)
 }
 
 func compileExpr(src string, opts []gojq.CompilerOption) (*expr, error) {

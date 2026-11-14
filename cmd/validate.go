@@ -24,7 +24,11 @@ func runValidate(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
-	if _, err := engine.New(cfg); err != nil {
+	vars, err := buildVars(cfg)
+	if err != nil {
+		return err
+	}
+	if _, err := engine.New(cfg, engine.WithVars(vars)); err != nil {
 		return err
 	}
 

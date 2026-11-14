@@ -40,6 +40,13 @@ const (
 	minExpandedNodes = 1_000_000
 )
 
+// YAMLNodeValue converts a YAML node (e.g. a config value) to a jq value with
+// the same rules as YAML input: exact integers, timestamps as text, string
+// keys.
+func YAMLNodeValue(n *yaml.Node) (interface{}, error) {
+	return yamlToValue(n)
+}
+
 func yamlToValue(doc *yaml.Node) (interface{}, error) {
 	c := &yamlConverter{
 		anchors:  map[*yaml.Node]anchorValue{},

@@ -5,6 +5,8 @@ import (
 	"os"
 	"regexp"
 	"sort"
+
+	"gopkg.in/yaml.v3"
 )
 
 var envRef = regexp.MustCompile(`\$\$|\$\{([A-Za-z_][A-Za-z0-9_]*)(:-([^}]*))?\}`)
@@ -68,8 +70,34 @@ func expandSourceEnv(label string, s *SourceConfig) error {
 	return nil
 }
 
-// expandConfigEnv expands environment references in source settings and
-// output.file.
+// expandNodeEnv expands environment references in every string scalar of n.
+func expandNodeEnv(label string, n *yaml.Node) error {
+	if n.Kind == yaml.ScalarNode && n.ShortTag() == "!!str" {
+		v, err := expandEnv(label, n.Value)
+		if err != nil {
+			return err
+		}
+		n.Value = v
+	}
+	for _, c := range n.Content {
+		if err := expandNodeEnv(label, c); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func sortedNames(m map[string]yaml.Node) []string {
+	names := make([]string, 0, len(m))
+	for name := range m {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// expandConfigEnv expands environment references in source settings, vars
+// and output.file.
 func expandConfigEnv(cfg *Config) error {
 	if err := expandSourceEnv("source", &cfg.Source); err != nil {
 		return err
@@ -85,6 +113,13 @@ func expandConfigEnv(cfg *Config) error {
 			return err
 		}
 		cfg.Sources[name] = s
+	}
+	for _, name := range sortedNames(cfg.Vars) {
+		n := cfg.Vars[name]
+		if err := expandNodeEnv("vars."+name, &n); err != nil {
+			return err
+		}
+		cfg.Vars[name] = n
 	}
 	file, err := expandEnv("output.file", cfg.Output.File)
 	if err != nil {

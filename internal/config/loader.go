@@ -65,6 +65,11 @@ func validate(cfg *Config, configPath string) error {
 	default:
 		return fmt.Errorf("config: output.format must be json, yaml or ndjson (got %q)", cfg.Output.Format)
 	}
+	for name := range cfg.Vars {
+		if err := CheckVarName(name); err != nil {
+			return fmt.Errorf("config: vars: %w", err)
+		}
+	}
 	if len(cfg.Handlers) == 0 {
 		return fmt.Errorf("config: handlers must be non-empty")
 	}
