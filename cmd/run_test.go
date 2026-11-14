@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"os"
@@ -21,9 +22,7 @@ func runWithArgs(t *testing.T, args ...string) string {
 	old := os.Stdout
 	os.Stdout = w
 
-	rootCmd.SetArgs(args)
-	handlerName = ""
-	limitRecords = 0
+	resetFlags(args)
 	execErr := rootCmd.Execute()
 
 	w.Close()
@@ -48,9 +47,7 @@ func runWithArgsExpectError(t *testing.T, args ...string) error {
 	old := os.Stdout
 	os.Stdout = w
 
-	rootCmd.SetArgs(args)
-	handlerName = ""
-	limitRecords = 0
+	resetFlags(args)
 	execErr := rootCmd.Execute()
 
 	w.Close()
@@ -61,6 +58,18 @@ func runWithArgsExpectError(t *testing.T, args ...string) error {
 		t.Fatal("expected error but command succeeded")
 	}
 	return execErr
+}
+
+// resetFlags clears state left behind by earlier Execute calls in the same process.
+func resetFlags(args []string) {
+	rootCmd.SetArgs(args)
+	handlerName = ""
+	limitRecords = 0
+	outputFormat = ""
+	outputFile = ""
+	for _, c := range rootCmd.Commands() {
+		c.SilenceUsage = false
+	}
 }
 
 func writeTemp(t *testing.T, name, content string) string {
@@ -249,5 +258,130 @@ handlers:
 	err := runWithArgsExpectError(t, "run", "-c", cfgFile)
 	if err == nil {
 		t.Fatal("expected error when no source and no stdin pipe")
+	}
+}
+
+func TestRuntimeError_NoUsage(t *testing.T) {
+	cfgFile := writeTemp(t, "alpakr.yaml", `
+version: "1"
+source:
+  path: /nonexistent/data.json
+handlers:
+  root:
+    fields:
+      id: ".id"
+`)
+	var stderr bytes.Buffer
+	rootCmd.SetOut(&stderr)
+	rootCmd.SetErr(&stderr)
+	defer func() {
+		rootCmd.SetOut(nil)
+		rootCmd.SetErr(nil)
+	}()
+
+	runWithArgsExpectError(t, "run", "-c", cfgFile)
+	if strings.Contains(stderr.String(), "Usage:") {
+		t.Errorf("runtime error printed usage:\n%s", stderr.String())
+	}
+	if strings.Contains(stderr.String(), "nonexistent") {
+		t.Errorf("error printed by cobra; Execute should print it once:\n%s", stderr.String())
+	}
+}
+
+func TestFlagError_ShowsUsage(t *testing.T) {
+	var stderr bytes.Buffer
+	rootCmd.SetOut(&stderr)
+	rootCmd.SetErr(&stderr)
+	defer func() {
+		rootCmd.SetOut(nil)
+		rootCmd.SetErr(nil)
+	}()
+
+	runWithArgsExpectError(t, "run", "--no-such-flag")
+	if !strings.Contains(stderr.String(), "Usage:") {
+		t.Errorf("flag error should print usage, got:\n%s", stderr.String())
+	}
+}
+
+func TestRun_UnknownOutputFormat(t *testing.T) {
+	dataFile := writeTemp(t, "data.json", `{"id":1}`)
+	cfgFile := writeTemp(t, "alpakr.yaml", `
+version: "1"
+source:
+  path: `+dataFile+`
+handlers:
+  root:
+    fields:
+      id: ".id"
+`)
+	err := runWithArgsExpectError(t, "run", "-c", cfgFile, "-f", "toml")
+	if !strings.Contains(err.Error(), "toml") {
+		t.Errorf("error = %v, want mention of unknown format", err)
+	}
+}
+
+func TestRun_OutputFile(t *testing.T) {
+	dir := t.TempDir()
+	dataFile := writeTemp(t, "data.json", `[{"u":"a&b"},{"u":"<c>"}]`)
+	cfgFile := writeTemp(t, "alpakr.yaml", `
+version: "1"
+source:
+  path: `+dataFile+`
+output:
+  indent: 0
+handlers:
+  root:
+    each: true
+    fields:
+      u: ".u"
+`)
+	outFile := filepath.Join(dir, "nested", "out.json")
+	if out := runWithArgs(t, "run", "-c", cfgFile, "-o", outFile); out != "" {
+		t.Errorf("stdout should be empty when writing to file, got %q", out)
+	}
+	got, err := os.ReadFile(outFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := `[{"u":"a&b"},{"u":"<c>"}]` + "\n"; string(got) != want {
+		t.Errorf("output file = %q, want %q", got, want)
+	}
+}
+
+func TestRun_NdjsonOutputFile(t *testing.T) {
+	dir := t.TempDir()
+	dataFile := writeTemp(t, "data.ndjson", "{\"id\":1}\n{\"id\":2}\n")
+	cfgFile := writeTemp(t, "alpakr.yaml", `
+version: "1"
+source:
+  path: `+dataFile+`
+handlers:
+  root:
+    fields:
+      id: ".id"
+`)
+	outFile := filepath.Join(dir, "out.ndjson")
+	runWithArgs(t, "run", "-c", cfgFile, "-o", outFile)
+	got, err := os.ReadFile(outFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "{\"id\":1}\n{\"id\":2}\n"; string(got) != want {
+		t.Errorf("output file = %q, want %q", got, want)
+	}
+}
+
+func TestFlushingReader_FlushesBeforeRead(t *testing.T) {
+	var out bytes.Buffer
+	bw := bufio.NewWriter(&out)
+	fr := &flushingReader{r: strings.NewReader("x"), w: bw}
+	if _, err := bw.WriteString("pending"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fr.Read(make([]byte, 1)); err != nil {
+		t.Fatal(err)
+	}
+	if out.String() != "pending" {
+		t.Errorf("buffered output not flushed before read: %q", out.String())
 	}
 }

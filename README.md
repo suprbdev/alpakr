@@ -54,7 +54,7 @@ source:
 
 output:
   format: json                # json | yaml (default: json)
-  indent: 2                   # JSON indentation (default: 2)
+  indent: 2                   # JSON indentation (default: 2; 0 = compact single line)
   # file: ./out/result.json   # write to file instead of stdout
 
 handlers:

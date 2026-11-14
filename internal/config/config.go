@@ -21,7 +21,7 @@ type SourceConfig struct {
 
 type OutputConfig struct {
 	Format string `yaml:"format"`
-	Indent int    `yaml:"indent"`
+	Indent *int   `yaml:"indent"` // nil = default (2); 0 = compact
 	File   string `yaml:"file"`
 }
 

@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -18,7 +20,7 @@ import (
 var handlerName string
 var limitRecords int
 
-var errLimitReached = fmt.Errorf("limit reached")
+var errLimitReached = errors.New("limit reached")
 
 var runCmd = &cobra.Command{
 	Use:   "run",
@@ -32,7 +34,7 @@ func init() {
 	rootCmd.AddCommand(runCmd)
 }
 
-func runRun(cmd *cobra.Command, _ []string) error {
+func runRun(_ *cobra.Command, _ []string) error {
 	cfg, err := config.Load(configPath)
 	if err != nil {
 		return err
@@ -44,6 +46,9 @@ func runRun(cmd *cobra.Command, _ []string) error {
 	}
 	if outputFile != "" {
 		cfg.Output.File = outputFile
+	}
+	if err := output.CheckFormat(cfg.Output.Format); err != nil {
+		return err
 	}
 
 	// Resolve handler name
@@ -58,7 +63,6 @@ func runRun(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("handler %q not found in config; available: %s", handlerName, handlerNames(cfg))
 	}
 
-	// Run engine
 	eng, err := engine.New(cfg)
 	if err != nil {
 		return err
@@ -71,49 +75,63 @@ func runRun(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("no source configured for handler %q and no data piped via stdin", handlerName)
 	}
 
-	// NDJSON: stream records one at a time to avoid loading full file into memory
 	if srcCfg.Format == "ndjson" {
-		var ndjson *source.NdjsonSource
-		if stdinIsPipe() {
-			ndjson = &source.NdjsonSource{}
-		} else {
-			f, openErr := os.Open(srcCfg.Path)
-			if openErr != nil {
-				return fmt.Errorf("opening ndjson file: %w", openErr)
-			}
-			defer f.Close()
-			ndjson = &source.NdjsonSource{Reader: f}
+		return runStream(cfg, eng, srcCfg)
+	}
+	return runBatch(cfg, eng, srcCfg, hasSource)
+}
+
+// runStream processes an NDJSON source one record at a time, writing each
+// result as soon as it is produced.
+func runStream(cfg *config.Config, eng *engine.Engine, srcCfg config.SourceConfig) (err error) {
+	var in io.Reader = os.Stdin
+	if !stdinIsPipe() {
+		f, openErr := os.Open(srcCfg.Path)
+		if openErr != nil {
+			return fmt.Errorf("opening ndjson file: %w", openErr)
 		}
-		w, werr := buildWriter(cfg)
-		if werr != nil {
-			return werr
+		defer f.Close()
+		in = f
+	}
+
+	sink, err := openSink(cfg.Output.File)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if cerr := sink.Close(); err == nil {
+			err = cerr
 		}
-		sw, ok := w.(streamWriter)
-		if !ok {
-			return fmt.Errorf("output format does not support streaming")
-		}
-		written := 0
-		err = ndjson.Stream(func(record interface{}) error {
-			if limitRecords > 0 && written >= limitRecords {
-				return errLimitReached
-			}
-			result, rerr := eng.Run(handlerName, record)
-			if rerr != nil {
-				return rerr
-			}
-			if result == nil {
-				return nil // filtered out
-			}
-			written++
-			return sw.WriteOne(result)
-		})
-		if err == errLimitReached {
-			return nil
-		}
+	}()
+	w, err := output.New(cfg.Output.Format, *cfg.Output.Indent, sink)
+	if err != nil {
 		return err
 	}
 
-	// Non-NDJSON: load full source then run
+	ndjson := &source.NdjsonSource{Reader: &flushingReader{r: in, w: sink.buf}}
+	written := 0
+	err = ndjson.Stream(func(record interface{}) error {
+		if limitRecords > 0 && written >= limitRecords {
+			return errLimitReached
+		}
+		result, rerr := eng.Run(handlerName, record)
+		if rerr != nil {
+			return rerr
+		}
+		if result == nil {
+			return nil // filtered out
+		}
+		written++
+		return w.WriteOne(result)
+	})
+	if errors.Is(err, errLimitReached) {
+		return nil
+	}
+	return err
+}
+
+// runBatch loads the full source, runs the handler once and writes the result.
+func runBatch(cfg *config.Config, eng *engine.Engine, srcCfg config.SourceConfig, hasSource bool) (err error) {
 	var src source.Source
 	if stdinIsPipe() {
 		// Pass explicit format only when a source was configured; otherwise auto-detect.
@@ -123,10 +141,7 @@ func runRun(cmd *cobra.Command, _ []string) error {
 		}
 		src = &source.StdinSource{Format: stdinFormat}
 	} else {
-		src, err = buildSource(srcCfg)
-		if err != nil {
-			return err
-		}
+		src = buildSource(srcCfg)
 	}
 	data, err := src.Load()
 	if err != nil {
@@ -137,48 +152,79 @@ func runRun(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	// Apply limit to array results
 	if limitRecords > 0 {
 		if arr, ok := result.([]interface{}); ok && len(arr) > limitRecords {
 			result = arr[:limitRecords]
 		}
 	}
 
-	// Write output
-	w, err := buildWriter(cfg)
+	sink, err := openSink(cfg.Output.File)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if cerr := sink.Close(); err == nil {
+			err = cerr
+		}
+	}()
+	w, err := output.New(cfg.Output.Format, *cfg.Output.Indent, sink)
 	if err != nil {
 		return err
 	}
 	return w.Write(result)
 }
 
-type writer interface {
-	Write(v interface{}) error
+// sink is a buffered output destination: stdout or a created file.
+type sink struct {
+	buf  *bufio.Writer
+	file *os.File
 }
 
-type streamWriter interface {
-	WriteOne(v interface{}) error
+// openSink opens path for writing, creating parent directories, or stdout when
+// path is empty. Close must be called to flush buffered output.
+func openSink(path string) (*sink, error) {
+	if path == "" {
+		return &sink{buf: bufio.NewWriterSize(os.Stdout, 64*1024)}, nil
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return nil, fmt.Errorf("creating output directory: %w", err)
+	}
+	f, err := os.Create(path)
+	if err != nil {
+		return nil, fmt.Errorf("creating output file: %w", err)
+	}
+	return &sink{buf: bufio.NewWriterSize(f, 64*1024), file: f}, nil
 }
 
-func buildWriter(cfg *config.Config) (writer, error) {
-	var out io.Writer = os.Stdout
-	if cfg.Output.File != "" {
-		if err := os.MkdirAll(filepath.Dir(cfg.Output.File), 0o755); err != nil {
-			return nil, fmt.Errorf("creating output directory: %w", err)
-		}
-		f, err := os.Create(cfg.Output.File)
-		if err != nil {
-			return nil, fmt.Errorf("creating output file: %w", err)
-		}
-		out = f
-	}
+func (s *sink) Write(p []byte) (int, error) { return s.buf.Write(p) }
 
-	switch cfg.Output.Format {
-	case "yaml", "yml":
-		return &output.YAMLWriter{Out: out}, nil
-	default:
-		return &output.JSONWriter{Indent: cfg.Output.Indent, Out: out}, nil
+// Close flushes buffered output and closes the file, if any.
+func (s *sink) Close() error {
+	err := s.buf.Flush()
+	if s.file != nil {
+		if cerr := s.file.Close(); err == nil {
+			err = cerr
+		}
 	}
+	if err != nil {
+		return fmt.Errorf("writing output: %w", err)
+	}
+	return nil
+}
+
+// flushingReader flushes w before every read from r. Streaming output is
+// therefore batched while input is plentiful, yet never held back while the
+// process waits on a slow or live input such as `tail -f`.
+type flushingReader struct {
+	r io.Reader
+	w *bufio.Writer
+}
+
+func (f *flushingReader) Read(p []byte) (int, error) {
+	if err := f.w.Flush(); err != nil {
+		return 0, fmt.Errorf("writing output: %w", err)
+	}
+	return f.r.Read(p)
 }
 
 func stdinIsPipe() bool {
@@ -189,11 +235,11 @@ func stdinIsPipe() bool {
 	return (fi.Mode() & os.ModeCharDevice) == 0
 }
 
-func buildSource(s config.SourceConfig) (source.Source, error) {
+func buildSource(s config.SourceConfig) source.Source {
 	if s.URL != "" {
-		return &source.URLSource{URL: s.URL, Format: s.Format, Method: s.Method, Headers: s.Headers, Body: s.Body}, nil
+		return &source.URLSource{URL: s.URL, Format: s.Format, Method: s.Method, Headers: s.Headers, Body: s.Body}
 	}
-	return &source.FileSource{Path: s.Path, Format: s.Format}, nil
+	return &source.FileSource{Path: s.Path, Format: s.Format}
 }
 
 func handlerNames(cfg *config.Config) string {

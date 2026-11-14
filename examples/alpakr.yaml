@@ -102,12 +102,13 @@ source:
 # output
 # =============================================================================
 output:
-  # format: output encoding — json | yaml
-  # Default: json
+  # format: output encoding — json | yaml (yml is an alias for yaml)
+  # Default: json. Any other value is an error. Overridden by --format / -f.
   format: json
 
   # indent: number of spaces for JSON pretty-printing
-  # Default: 2. Has no effect on yaml output.
+  # Default: 2. Set 0 for compact single-line JSON. Must be >= 0.
+  # Has no effect on yaml output or ndjson streaming (always one line per record).
   indent: 2
 
   # file: write output to a file instead of stdout

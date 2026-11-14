@@ -28,6 +28,10 @@ var rootCmd = &cobra.Command{
 	Long: `alpakr reads data from a file or URL, applies YAML-configured
 handler pipelines to transform and restructure it, and outputs
 JSON or YAML to stdout or a file.`,
+	SilenceErrors: true,
+	PersistentPreRun: func(cmd *cobra.Command, _ []string) {
+		cmd.SilenceUsage = true
+	},
 }
 
 // SetVersion wires the build-time version into the root command's --version flag.
@@ -37,7 +41,7 @@ func SetVersion(v string) {
 
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintln(os.Stderr, "Error:", err)
 		os.Exit(1)
 	}
 }

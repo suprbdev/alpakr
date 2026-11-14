@@ -9,7 +9,7 @@ import (
 func cfg(handlers map[string]config.HandlerConfig) *config.Config {
 	return &config.Config{
 		Source:   config.SourceConfig{Path: "/tmp/x.json", Format: "json"},
-		Output:   config.OutputConfig{Format: "json", Indent: 2},
+		Output:   config.OutputConfig{Format: "json"},
 		Handlers: handlers,
 	}
 }
