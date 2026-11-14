@@ -2,6 +2,7 @@ package transform
 
 import (
 	"math"
+	"math/big"
 	"regexp"
 	"strconv"
 	"strings"
@@ -35,33 +36,48 @@ func Slugify(v interface{}) interface{} {
 	return s
 }
 
-// ToInt converts a string or float to int.
+// ToInt converts a string or number to an integer, truncating any fraction.
+// Values outside the int range become *big.Int. Other values, and strings
+// that are not numeric, are returned unchanged.
 func ToInt(v interface{}) interface{} {
 	switch n := v.(type) {
 	case float64:
-		return int(n)
-	case int:
+		if math.IsNaN(n) || math.IsInf(n, 0) {
+			return v
+		}
+		t := math.Trunc(n)
+		if t >= math.MinInt && t < math.MaxInt {
+			return int(t)
+		}
+		b, _ := big.NewFloat(t).Int(nil)
+		return b
+	case int, *big.Int:
 		return n
 	case string:
-		i, err := strconv.Atoi(n)
-		if err == nil {
+		if i, err := strconv.Atoi(n); err == nil {
 			return i
 		}
-		f, err := strconv.ParseFloat(n, 64)
-		if err == nil {
-			return int(f)
+		if b, ok := new(big.Int).SetString(n, 10); ok {
+			return b
+		}
+		if f, err := strconv.ParseFloat(n, 64); err == nil {
+			return ToInt(f)
 		}
 	}
 	return v
 }
 
-// ToFloat converts a string or int to float64.
+// ToFloat converts a string or number to float64. Other values, and strings
+// that are not numeric, are returned unchanged.
 func ToFloat(v interface{}) interface{} {
 	switch n := v.(type) {
 	case float64:
 		return n
 	case int:
 		return float64(n)
+	case *big.Int:
+		f, _ := new(big.Float).SetInt(n).Float64()
+		return f
 	case string:
 		f, err := strconv.ParseFloat(n, 64)
 		if err == nil {

@@ -4,25 +4,35 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 
 	"gopkg.in/yaml.v3"
 )
 
 func parseJSON(data []byte) (interface{}, error) {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.UseNumber()
 	var v interface{}
-	if err := json.Unmarshal(data, &v); err != nil {
+	if err := dec.Decode(&v); err != nil {
 		return nil, fmt.Errorf("parsing JSON: %w", err)
 	}
-	return v, nil
+	if _, err := dec.Token(); err != io.EOF {
+		return nil, fmt.Errorf("parsing JSON: unexpected data after top-level value at offset %d", dec.InputOffset())
+	}
+	return normalizeJSON(v), nil
 }
 
 func parseYAML(data []byte) (interface{}, error) {
-	var v interface{}
-	if err := yaml.Unmarshal(data, &v); err != nil {
+	var doc yaml.Node
+	if err := yaml.Unmarshal(data, &doc); err != nil {
 		return nil, fmt.Errorf("parsing YAML: %w", err)
 	}
-	// yaml.v3 decodes maps as map[string]interface{} which gojq handles fine
-	return v, nil
+	stringifyTimestamps(&doc)
+	var v interface{}
+	if err := doc.Decode(&v); err != nil {
+		return nil, fmt.Errorf("parsing YAML: %w", err)
+	}
+	return normalizeYAML(v), nil
 }
 
 func parse(data []byte, format string) (interface{}, error) {

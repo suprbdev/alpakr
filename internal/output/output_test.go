@@ -3,6 +3,7 @@ package output
 import (
 	"bytes"
 	"fmt"
+	"math/big"
 	"testing"
 )
 
@@ -80,5 +81,26 @@ func TestNew(t *testing.T) {
 func TestNew_UnknownFormat(t *testing.T) {
 	if _, err := New("toml", 2, &bytes.Buffer{}); err == nil {
 		t.Fatal("expected error for unknown format")
+	}
+}
+
+func TestWriters_BigInt(t *testing.T) {
+	b, _ := new(big.Int).SetString("12345678901234567890", 10)
+	v := map[string]interface{}{"id": b, "a": []interface{}{b}}
+
+	var js bytes.Buffer
+	if err := (&JSONWriter{Out: &js}).Write(v); err != nil {
+		t.Fatal(err)
+	}
+	if want := `{"a":[12345678901234567890],"id":12345678901234567890}` + "\n"; js.String() != want {
+		t.Errorf("json = %q, want %q", js.String(), want)
+	}
+
+	var ys bytes.Buffer
+	if err := (&YAMLWriter{Out: &ys}).Write(v); err != nil {
+		t.Fatal(err)
+	}
+	if want := "a:\n    - 12345678901234567890\nid: 12345678901234567890\n"; ys.String() != want {
+		t.Errorf("yaml = %q, want %q", ys.String(), want)
 	}
 }

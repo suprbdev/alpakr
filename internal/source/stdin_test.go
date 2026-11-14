@@ -132,7 +132,7 @@ func TestStdinSource_AutoDetect_LeadingWhitespace(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected map, got %T", v)
 	}
-	if m["x"].(float64) != 42 {
+	if m["x"] != 42 {
 		t.Errorf("x = %v, want 42", m["x"])
 	}
 }

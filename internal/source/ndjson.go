@@ -2,7 +2,6 @@ package source
 
 import (
 	"bufio"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -46,8 +45,8 @@ func (s *NdjsonSource) Stream(fn func(interface{}) error) error {
 		if len(line) == 0 {
 			continue
 		}
-		var v interface{}
-		if err := json.Unmarshal(line, &v); err != nil {
+		v, err := parseJSON(line)
+		if err != nil {
 			return fmt.Errorf("ndjson line %d: %w", lineNum, err)
 		}
 		if err := fn(v); err != nil {
