@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -25,14 +26,19 @@ func runWithArgs(t *testing.T, args ...string) string {
 	old := os.Stdout
 	os.Stdout = w
 
+	var buf bytes.Buffer
+	read := make(chan error, 1)
+	go func() {
+		_, err := buf.ReadFrom(r)
+		read <- err
+	}()
+
 	resetFlags(args)
 	execErr := rootCmd.Execute()
 
 	_ = w.Close()
 	os.Stdout = old
-
-	var buf bytes.Buffer
-	if _, err := buf.ReadFrom(r); err != nil {
+	if err := <-read; err != nil {
 		t.Fatal(err)
 	}
 
@@ -51,12 +57,18 @@ func runWithArgsExpectError(t *testing.T, args ...string) error {
 	}
 	old := os.Stdout
 	os.Stdout = w
+	drained := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(io.Discard, r)
+		close(drained)
+	}()
 
 	resetFlags(args)
 	execErr := rootCmd.Execute()
 
 	_ = w.Close()
 	os.Stdout = old
+	<-drained
 	_ = r.Close()
 
 	if execErr == nil {
@@ -75,6 +87,7 @@ func resetFlags(args []string) {
 	readStdin = false
 	argStrings = nil
 	argJSON = nil
+	workers = 1
 	for _, c := range rootCmd.Commands() {
 		c.SilenceUsage = false
 	}
@@ -978,5 +991,128 @@ handlers:
 `)
 	if err := runWithArgsExpectError(t, "validate", "-c", cfgFile); !strings.Contains(err.Error(), "pagination next") {
 		t.Errorf("err = %v", err)
+	}
+}
+
+func TestRun_WorkersMatchSequential(t *testing.T) {
+	var in strings.Builder
+	for i := 0; i < 3000; i++ {
+		fmt.Fprintf(&in, "{\"id\":%d,\"tags\":[\"a\",\"b\"]}\n", i)
+	}
+	dataFile := writeTemp(t, "data.ndjson", in.String())
+	arrFile := writeTemp(t, "data.json", "["+strings.ReplaceAll(strings.TrimSpace(in.String()), "\n", ",")+"]")
+	cfgFile := writeTemp(t, "alpakr.yaml", `
+version: "1"
+source:
+  path: `+dataFile+`
+handlers:
+  root:
+    filter: ".id % 7 != 3"
+    fields:
+      id: ".id"
+      tags:
+        handler: tag
+        input: ".tags"
+  tag:
+    each: true
+    fields:
+      t: "."
+`)
+	for _, args := range [][]string{nil, {"--limit", "100"}, {"--limit", "2999"}, {"-f", "yaml"}} {
+		base := append([]string{"run", "-c", cfgFile}, args...)
+		want := runWithArgs(t, base...)
+		for _, n := range []string{"4", "0"} {
+			if got := runWithArgs(t, append(base, "--workers", n)...); got != want {
+				t.Errorf("%v --workers %s: output differs (%d vs %d bytes)", args, n, len(got), len(want))
+			}
+		}
+	}
+
+	arrCfg := writeTemp(t, "arr.yaml", `
+version: "1"
+source:
+  path: `+arrFile+`
+output:
+  indent: 0
+handlers:
+  root:
+    each: true
+    filter: ".id % 5 != 0"
+    fields:
+      id: ".id"
+`)
+	for _, args := range [][]string{nil, {"--limit", "777"}} {
+		base := append([]string{"run", "-c", arrCfg}, args...)
+		if want, got := runWithArgs(t, base...), runWithArgs(t, append(base, "--workers", "8")...); got != want {
+			t.Errorf("batch %v: parallel output differs", args)
+		}
+	}
+}
+
+func TestRun_WorkersErrorOrder(t *testing.T) {
+	var in strings.Builder
+	for i := 0; i < 2000; i++ {
+		switch i {
+		case 600:
+			in.WriteString("{\"x\":1}\n")
+		case 1500:
+			in.WriteString("{bad json\n")
+		default:
+			in.WriteString("{\"x\":\"ok\"}\n")
+		}
+	}
+	cfgFile := writeTemp(t, "alpakr.yaml", `
+version: "1"
+handlers:
+  root:
+    fields:
+      x: ".x | ascii_upcase"
+`)
+	err := runWithStdinExpectError(t, in.String(), "run", "-c", cfgFile, "--workers", "4")
+	if !strings.Contains(err.Error(), "(1)") {
+		t.Errorf("err = %v, want the transform error of record 600", err)
+	}
+	in2 := strings.Replace(in.String(), "{\"x\":1}\n", "{\"x\":\"ok\"}\n", 1)
+	err = runWithStdinExpectError(t, in2, "run", "-c", cfgFile, "--workers", "4")
+	if !strings.Contains(err.Error(), "value 1501") {
+		t.Errorf("err = %v, want the parse error of value 1501", err)
+	}
+	if got := runWithStdin(t, in2, "run", "-c", cfgFile, "--workers", "4", "--limit", "1000"); strings.Count(got, "\n") != 1000 {
+		t.Errorf("limit before the bad value: %d lines", strings.Count(got, "\n"))
+	}
+}
+
+func TestRun_WorkersInvalid(t *testing.T) {
+	cfgFile := writeTemp(t, "alpakr.yaml", stdinOnlyConfig)
+	if err := runWithArgsExpectError(t, "run", "-c", cfgFile, "--workers", "-1"); !strings.Contains(err.Error(), "--workers") {
+		t.Errorf("err = %v", err)
+	}
+}
+
+func TestRun_WorkersNdjsonLineErrors(t *testing.T) {
+	var in strings.Builder
+	for i := 1; i <= 3000; i++ {
+		if i == 2222 {
+			in.WriteString("{oops\n")
+			continue
+		}
+		fmt.Fprintf(&in, "{\"id\":%d}\n", i)
+	}
+	dataFile := writeTemp(t, "data.ndjson", in.String())
+	cfgFile := writeTemp(t, "alpakr.yaml", `
+version: "1"
+source:
+  path: `+dataFile+`
+handlers:
+  root:
+    fields:
+      id: ".id"
+`)
+	err := runWithArgsExpectError(t, "run", "-c", cfgFile, "--workers", "4")
+	if !strings.Contains(err.Error(), "ndjson line 2222") {
+		t.Errorf("err = %v", err)
+	}
+	if got := runWithArgs(t, "run", "-c", cfgFile, "--workers", "4", "--limit", "2000"); strings.Count(got, "\n") != 2000 || !strings.HasSuffix(got, "{\"id\":2000}\n") {
+		t.Errorf("limited output wrong: %d lines", strings.Count(got, "\n"))
 	}
 }

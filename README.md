@@ -32,6 +32,7 @@ cat access.ndjson | alpakr run         # several JSON values / YAML docs on stdi
 jq '.items[]' big.json | alpakr run    # jq output works too (pretty-printed values are fine)
 cat other.json | alpakr run --stdin    # read stdin instead of the configured source (format sniffed unless set)
 alpakr run --limit 10                  # process only the first 10 records
+alpakr run --workers 0                 # process records on all CPUs (default 1); output order is kept
 
 alpakr run --arg region=eu             # jq variable $region (string); --argjson name=<json> for JSON values
 
