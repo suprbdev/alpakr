@@ -19,8 +19,9 @@ func TestURLSource_GETDefault(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	u := &URLSource{URL: srv.URL, Format: "json"}
-	v, err := u.Load()
+	format := "json"
+	u := &URLSource{URL: srv.URL}
+	v, err := loadURL(u, format)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -46,8 +47,9 @@ func TestURLSource_CustomMethod(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	u := &URLSource{URL: srv.URL, Format: "json", Method: "DELETE"}
-	if _, err := u.Load(); err != nil {
+	format := "json"
+	u := &URLSource{URL: srv.URL, Method: "DELETE"}
+	if _, err := loadURL(u, format); err != nil {
 		t.Fatalf("Load: %v", err)
 	}
 	if gotMethod != "DELETE" {
@@ -67,14 +69,13 @@ func TestURLSource_Headers(t *testing.T) {
 	defer srv.Close()
 
 	u := &URLSource{
-		URL:    srv.URL,
-		Format: "json",
+		URL: srv.URL,
 		Headers: map[string]string{
 			"Authorization": "Bearer token123",
 			"Accept":        "application/json",
 		},
 	}
-	if _, err := u.Load(); err != nil {
+	if _, err := loadURL(u, "json"); err != nil {
 		t.Fatalf("Load: %v", err)
 	}
 	if gotAuth != "Bearer token123" {
@@ -100,14 +101,13 @@ func TestURLSource_POSTWithBody(t *testing.T) {
 
 	u := &URLSource{
 		URL:    srv.URL,
-		Format: "json",
 		Method: "POST",
 		Headers: map[string]string{
 			"Content-Type": "application/json",
 		},
 		Body: `{"filter":"active"}`,
 	}
-	if _, err := u.Load(); err != nil {
+	if _, err := loadURL(u, "json"); err != nil {
 		t.Fatalf("Load: %v", err)
 	}
 	if gotMethod != "POST" {
@@ -127,8 +127,9 @@ func TestURLSource_HTTPError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	u := &URLSource{URL: srv.URL, Format: "json"}
-	_, err := u.Load()
+	format := "json"
+	u := &URLSource{URL: srv.URL}
+	_, err := loadURL(u, format)
 	if err == nil {
 		t.Fatal("expected error for HTTP 404")
 	}
@@ -142,8 +143,9 @@ func TestURLSource_YAMLResponse(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	u := &URLSource{URL: srv.URL, Format: "yaml"}
-	v, err := u.Load()
+	format := "yaml"
+	u := &URLSource{URL: srv.URL}
+	v, err := loadURL(u, format)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -197,11 +199,25 @@ func TestURLSource_NdjsonLoad(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	v, err := (&URLSource{URL: srv.URL, Format: "ndjson"}).Load()
+	v, err := loadURL(&URLSource{URL: srv.URL}, "ndjson")
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
 	if arr, ok := v.([]interface{}); !ok || len(arr) != 2 {
 		t.Errorf("got %#v, want 2-element array", v)
 	}
+}
+
+// loadURL fetches u and returns its single value, or all values as an array
+// for ndjson.
+func loadURL(u *URLSource, format string) (interface{}, error) {
+	body, err := u.Open()
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = body.Close() }()
+	if format == "ndjson" {
+		return readAll(body, format)
+	}
+	return readOne(body, format)
 }

@@ -7,9 +7,9 @@ import (
 	"strings"
 )
 
+// URLSource fetches input over HTTP.
 type URLSource struct {
 	URL     string
-	Format  string
 	Method  string
 	Headers map[string]string
 	Body    string
@@ -46,19 +46,4 @@ func (u *URLSource) Open() (io.ReadCloser, error) {
 		return nil, fmt.Errorf("fetching %q: HTTP %d", u.URL, resp.StatusCode)
 	}
 	return resp.Body, nil
-}
-
-// Load fetches the URL and parses the response body according to Format.
-func (u *URLSource) Load() (interface{}, error) {
-	body, err := u.Open()
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = body.Close() }()
-
-	data, err := io.ReadAll(body)
-	if err != nil {
-		return nil, fmt.Errorf("reading response from %q: %w", u.URL, err)
-	}
-	return parse(data, u.Format)
 }

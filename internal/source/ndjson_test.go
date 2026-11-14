@@ -5,17 +5,11 @@ import (
 	"testing"
 )
 
-func TestNdjsonSource_Stream(t *testing.T) {
+func TestNdjson_Stream(t *testing.T) {
 	input := `{"name":"alice","age":30}` + "\n" + `{"name":"bob","age":25}` + "\n"
-	s := &NdjsonSource{Reader: strings.NewReader(input)}
-
-	var records []interface{}
-	err := s.Stream(func(v interface{}) error {
-		records = append(records, v)
-		return nil
-	})
+	records, err := readAll(strings.NewReader(input), "ndjson")
 	if err != nil {
-		t.Fatalf("Stream: %v", err)
+		t.Fatalf("readAll: %v", err)
 	}
 	if len(records) != 2 {
 		t.Fatalf("got %d records, want 2", len(records))
@@ -26,76 +20,52 @@ func TestNdjsonSource_Stream(t *testing.T) {
 	}
 }
 
-func TestNdjsonSource_SkipsBlankLines(t *testing.T) {
+func TestNdjson_SkipsBlankLines(t *testing.T) {
 	input := `{"x":1}` + "\n\n" + `{"x":2}` + "\n"
-	s := &NdjsonSource{Reader: strings.NewReader(input)}
-
-	var count int
-	err := s.Stream(func(_ interface{}) error {
-		count++
-		return nil
-	})
+	records, err := readAll(strings.NewReader(input), "ndjson")
+	count := len(records)
 	if err != nil {
-		t.Fatalf("Stream: %v", err)
+		t.Fatalf("readAll: %v", err)
 	}
 	if count != 2 {
 		t.Errorf("got %d records, want 2", count)
 	}
 }
 
-func TestNdjsonSource_Load(t *testing.T) {
-	input := `{"a":1}` + "\n" + `{"a":2}` + "\n"
-	s := &NdjsonSource{Reader: strings.NewReader(input)}
-
-	v, err := s.Load()
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	arr, ok := v.([]interface{})
-	if !ok {
-		t.Fatalf("expected slice, got %T", v)
-	}
-	if len(arr) != 2 {
-		t.Errorf("got %d elements, want 2", len(arr))
-	}
-}
-
-func TestNdjsonSource_InvalidJSON(t *testing.T) {
+func TestNdjson_InvalidJSON(t *testing.T) {
 	input := `{"a":1}` + "\n" + `not json` + "\n"
-	s := &NdjsonSource{Reader: strings.NewReader(input)}
-
-	err := s.Stream(func(_ interface{}) error { return nil })
+	_, err := readAll(strings.NewReader(input), "ndjson")
 	if err == nil {
 		t.Fatal("expected error for invalid JSON line")
 	}
 }
 
-func TestNdjsonSource_SkipsWhitespaceAndCRLFLines(t *testing.T) {
+func TestNdjson_SkipsWhitespaceAndCRLFLines(t *testing.T) {
 	input := "\xEF\xBB\xBF{\"x\":1}\r\n   \r\n\t\n\r\n{\"x\":2}\r\n  {\"x\":3}  \n"
+	records, err := readAll(strings.NewReader(input), "ndjson")
 	var got []interface{}
-	err := (&NdjsonSource{Reader: strings.NewReader(input)}).Stream(func(v interface{}) error {
-		got = append(got, v.(map[string]interface{})["x"])
-		return nil
-	})
+	for _, r := range records {
+		got = append(got, r.(map[string]interface{})["x"])
+	}
 	if err != nil {
-		t.Fatalf("Stream: %v", err)
+		t.Fatalf("readAll: %v", err)
 	}
 	if len(got) != 3 || got[0] != 1 || got[1] != 2 || got[2] != 3 {
 		t.Errorf("got %v, want [1 2 3]", got)
 	}
 }
 
-func TestNdjsonSource_ErrorLineNumber(t *testing.T) {
+func TestNdjson_ErrorLineNumber(t *testing.T) {
 	input := "{\"x\":1}\n\n{bad}\n"
-	err := (&NdjsonSource{Reader: strings.NewReader(input)}).Stream(func(interface{}) error { return nil })
+	_, err := readAll(strings.NewReader(input), "ndjson")
 	if err == nil || !strings.HasPrefix(err.Error(), "ndjson line 3:") {
 		t.Errorf("err = %v, want ndjson line 3 error", err)
 	}
 }
 
-func TestNdjsonSource_LineTooLong(t *testing.T) {
+func TestNdjson_LineTooLong(t *testing.T) {
 	input := "{\"x\":1}\n{\"s\":\"" + strings.Repeat("a", maxLine) + "\"}\n"
-	err := (&NdjsonSource{Reader: strings.NewReader(input)}).Stream(func(interface{}) error { return nil })
+	_, err := readAll(strings.NewReader(input), "ndjson")
 	if err == nil || !strings.Contains(err.Error(), "ndjson line 2: exceeds") {
 		t.Errorf("err = %v, want line-too-long error for line 2", err)
 	}
