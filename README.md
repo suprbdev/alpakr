@@ -80,6 +80,10 @@ handlers:
       country: ".country_code | ascii_upcase"
 ```
 
+### Strict parsing
+
+Unknown keys are errors, reported with the line, section and valid keys — `line 14: unknown key "filtr" in handler (valid keys: source, input, each, filter, fields)` — so typos don't silently change behaviour.
+
 ### Environment variables
 
 Source settings (`path`, `url`, `method`, header values, `body`, `timeout`) and `output.file` expand `${VAR}` and `${VAR:-default}`; an unset `${VAR}` without a default is an error, and `$$` is a literal `$`. jq expressions can read `$ENV.VAR` / `env.VAR`.
