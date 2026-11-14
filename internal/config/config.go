@@ -45,11 +45,63 @@ type OutputConfig struct {
 }
 
 type HandlerConfig struct {
-	Source string                 `yaml:"source"` // key into Config.Sources; empty = use Config.Source
-	Input  string                 `yaml:"input"`
-	Each   bool                   `yaml:"each"`
-	Filter string                 `yaml:"filter"`
-	Fields map[string]FieldConfig `yaml:"fields"`
+	Source string `yaml:"source"` // key into Config.Sources; empty = use Config.Source
+	Input  string `yaml:"input"`
+	Each   bool   `yaml:"each"`
+	Filter string `yaml:"filter"`
+	Fields Fields `yaml:"fields"`
+}
+
+// Fields is an ordered list of output fields, kept in config order.
+type Fields []Field
+
+// Field is a named output field.
+type Field struct {
+	Name string
+	FieldConfig
+}
+
+// Get returns the field called name and whether it exists.
+func (fs Fields) Get(name string) (FieldConfig, bool) {
+	for _, f := range fs {
+		if f.Name == name {
+			return f.FieldConfig, true
+		}
+	}
+	return FieldConfig{}, false
+}
+
+// UnmarshalYAML decodes a mapping of field name to field definition,
+// preserving key order. Duplicate names are rejected.
+func (fs *Fields) UnmarshalYAML(n *yaml.Node) error {
+	if n.Kind == yaml.AliasNode {
+		n = n.Alias
+	}
+	if n.Kind != yaml.MappingNode {
+		return fmt.Errorf("line %d: 'fields' must be a map of field name to definition", n.Line)
+	}
+	out := make(Fields, 0, len(n.Content)/2)
+	seen := make(map[string]bool, len(n.Content)/2)
+	for i := 0; i+1 < len(n.Content); i += 2 {
+		k, v := n.Content[i], n.Content[i+1]
+		if k.Kind != yaml.ScalarNode {
+			return fmt.Errorf("line %d: field names must be strings", k.Line)
+		}
+		if seen[k.Value] {
+			return fmt.Errorf("line %d: duplicate field %q", k.Line, k.Value)
+		}
+		seen[k.Value] = true
+		if v.Kind == yaml.ScalarNode && v.ShortTag() == "!!null" {
+			return fmt.Errorf("line %d: field %q has no value; expected a jq expression", k.Line, k.Value)
+		}
+		var fc FieldConfig
+		if err := v.Decode(&fc); err != nil {
+			return err
+		}
+		out = append(out, Field{Name: k.Value, FieldConfig: fc})
+	}
+	*fs = out
+	return nil
 }
 
 // FieldConfig is a union: a jq expression string, a sub-handler reference, or an inline nested object.
@@ -57,7 +109,7 @@ type FieldConfig struct {
 	Expr    string
 	Handler string
 	Input   string
-	Fields  map[string]FieldConfig // inline nested object
+	Fields  Fields // inline nested object
 }
 
 // UnmarshalYAML decodes a field from a scalar (jq expression) or a mapping

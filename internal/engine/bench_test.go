@@ -12,17 +12,17 @@ func BenchmarkRun_Each(b *testing.B) {
 		"root": {
 			Each:   true,
 			Filter: ".status >= 400",
-			Fields: map[string]config.FieldConfig{
-				"id":   field(".id"),
-				"slug": field(".name | slugify"),
-				"loc": inlineFields(".loc", map[string]config.FieldConfig{
-					"city": field(".city"),
-					"cc":   field(".cc | ascii_upcase"),
-				}),
-				"tags": subHandler("tag", ".tags"),
-			},
+			Fields: fields(
+				"id", field(".id"),
+				"slug", field(".name | slugify"),
+				"loc", inlineFields(".loc", fields(
+					"city", field(".city"),
+					"cc", field(".cc | ascii_upcase"),
+				)),
+				"tags", subHandler("tag", ".tags"),
+			),
 		},
-		"tag": {Each: true, Fields: map[string]config.FieldConfig{"t": field(".")}},
+		"tag": {Each: true, Fields: fields("t", field("."))},
 	}))
 	if err != nil {
 		b.Fatal(err)

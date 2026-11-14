@@ -75,10 +75,10 @@ func validate(cfg *Config, configPath string) error {
 				return fmt.Errorf("config: handler %q references undefined source %q", name, h.Source)
 			}
 		}
-		for fieldName, f := range h.Fields {
+		for _, f := range h.Fields {
 			if f.Handler != "" {
 				if _, ok := cfg.Handlers[f.Handler]; !ok {
-					return fmt.Errorf("config: handler %q field %q references undefined handler %q", name, fieldName, f.Handler)
+					return fmt.Errorf("config: handler %q field %q references undefined handler %q", name, f.Name, f.Handler)
 				}
 			}
 		}

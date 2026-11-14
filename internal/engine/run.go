@@ -3,6 +3,8 @@ package engine
 import (
 	"errors"
 	"fmt"
+
+	"github.com/suprbdev/alpakr/internal/record"
 )
 
 // Run processes data through the named handler and returns the result.
@@ -90,19 +92,19 @@ func (h *compiledHandler) runOne(data interface{}, depth int) (interface{}, erro
 			return nil, nil
 		}
 	}
-	return buildObject(h.fields, data, depth)
+	return h.obj.build(data, depth)
 }
 
-func buildObject(fields []compiledField, data interface{}, depth int) (interface{}, error) {
-	out := make(map[string]interface{}, len(fields))
-	for i := range fields {
-		val, err := fields[i].eval(data, depth)
+func (s *objectSpec) build(data interface{}, depth int) (interface{}, error) {
+	values := make([]interface{}, len(s.fields))
+	for i := range s.fields {
+		val, err := s.fields[i].eval(data, depth)
 		if err != nil {
 			return nil, err
 		}
-		out[fields[i].name] = val
+		values[i] = val
 	}
-	return out, nil
+	return &record.Object{Keys: s.keys, Values: values}, nil
 }
 
 func (f *compiledField) eval(data interface{}, depth int) (interface{}, error) {
@@ -136,7 +138,7 @@ func (f *compiledField) eval(data interface{}, depth int) (interface{}, error) {
 		}
 		return val, nil
 	}
-	return buildObject(f.fields, data, depth)
+	return f.obj.build(data, depth)
 }
 
 // eval returns the first output of x for input v, or nil if it produces none.
