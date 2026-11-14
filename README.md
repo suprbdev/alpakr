@@ -144,7 +144,7 @@ handlers:
       status: ".status"
 ```
 
-Output is one JSON object per line (NDJSON), regardless of the configured output format. Pipe via stdin works the same way — `cat large.ndjson | alpakr run` streams without buffering.
+With JSON output, each record is written as one compact line (NDJSON) and `indent` is ignored; with YAML output, records form a `---`-separated multi-document stream. Pipe via stdin works the same way — `cat large.ndjson | alpakr run` streams without buffering, and output is flushed whenever alpakr waits for more input, so `tail -f app.log | alpakr run` emits records as they arrive.
 
 `--limit N` works with NDJSON sources and stops after N records have been written (filtered-out records don't count toward the limit).
 
@@ -329,7 +329,7 @@ handlers:
       code: ".country_code | ascii_upcase"
 ```
 
-Output:
+Output (keys are sorted alphabetically):
 
 ```json
 [
@@ -338,11 +338,17 @@ Output:
     "distance_km": 13.68,
     "id": 1,
     "location": {
-      "country": { "code": "GB", "name": "England" },
+      "country": {
+        "code": "GB",
+        "name": "England"
+      },
       "name": "Derbyshire",
       "slug": "derbyshire"
     },
-    "tags": ["HIKING", "HILLS"],
+    "tags": [
+      "HIKING",
+      "HILLS"
+    ],
     "title": "peak district walk"
   }
 ]

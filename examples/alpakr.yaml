@@ -193,7 +193,10 @@ handlers:
     # field mapping. Records where the expression returns false or null are
     # dropped from the output entirely.
     #
-    # Has no effect when each: false.
+    # With each: false the filter applies to the single input: a rejected
+    # input produces null (as a sub-handler field value, or as the whole
+    # output). For ndjson sources each line is one record, so rejected lines
+    # are skipped — this is how ndjson filtering works.
     #
     # Examples:
     #   ".active == true"        — boolean field check
@@ -205,7 +208,8 @@ handlers:
     # fields: map of output field name → value definition.
     # Each key becomes a field in the output object.
     # Values are either a jq expression string or a sub-handler reference.
-    # Fields are not ordered — output object key order is not guaranteed.
+    # Values can also be inline nested objects (see "Field type 2" below).
+    # Output object keys are sorted alphabetically, not in config order.
     fields:
 
       # -----------------------------------------------------------------------
