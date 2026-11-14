@@ -76,3 +76,16 @@ func TestParseDispatch(t *testing.T) {
 		t.Errorf("parse(yaml): x = %v, want 1", v.(map[string]interface{})["x"])
 	}
 }
+
+func TestParse_BOM(t *testing.T) {
+	for _, format := range []string{"json", "yaml"} {
+		v, err := parse([]byte("\xEF\xBB\xBF{\"x\": 1}"), format)
+		if err != nil {
+			t.Errorf("parse(%s) with BOM: %v", format, err)
+			continue
+		}
+		if v.(map[string]interface{})["x"] != 1 {
+			t.Errorf("parse(%s) with BOM: got %#v", format, v)
+		}
+	}
+}

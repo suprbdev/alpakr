@@ -2,6 +2,7 @@ package source
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -38,6 +39,11 @@ func (s *StdinSource) Load() (interface{}, error) {
 // detectStdinFormat peeks at the first non-whitespace byte to guess the format.
 // '{' or '[' → json; anything else → yaml.
 func detectStdinFormat(r *bufio.Reader) (string, error) {
+	if b, err := r.Peek(len(utf8BOM)); err == nil && bytes.Equal(b, utf8BOM) {
+		if _, err := r.Discard(len(utf8BOM)); err != nil {
+			return "", err
+		}
+	}
 	for {
 		b, err := r.ReadByte()
 		if err != nil {
