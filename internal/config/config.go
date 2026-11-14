@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"regexp"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -13,6 +14,22 @@ type Config struct {
 	Sources  map[string]SourceConfig  `yaml:"sources"` // named sources map
 	Output   OutputConfig             `yaml:"output"`
 	Handlers map[string]HandlerConfig `yaml:"handlers"`
+	Vars     map[string]yaml.Node     `yaml:"vars"` // available to jq as $name; any YAML value
+}
+
+// varName matches names usable as jq variables.
+var varName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+// CheckVarName reports whether name can be used as a jq variable ($name).
+// ENV is reserved for the environment.
+func CheckVarName(name string) error {
+	if !varName.MatchString(name) {
+		return fmt.Errorf("invalid variable name %q: use letters, digits and underscores, not starting with a digit", name)
+	}
+	if name == "ENV" {
+		return fmt.Errorf("variable name %q is reserved ($ENV is the environment)", name)
+	}
+	return nil
 }
 
 type SourceConfig struct {

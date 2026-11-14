@@ -8,7 +8,12 @@ import (
 	"io"
 )
 
-// parseJSON decodes data holding exactly one JSON value.
+// ParseJSON decodes data holding exactly one JSON value, with integers kept
+// exact.
+func ParseJSON(data []byte) (interface{}, error) {
+	return parseJSON(data)
+}
+
 func parseJSON(data []byte) (interface{}, error) {
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.UseNumber()

@@ -151,7 +151,7 @@ func (x *expr) eval(v interface{}) (interface{}, error) {
 			return val, nil
 		}
 	}
-	iter := x.code.Run(v)
+	iter := x.code.Run(v, x.vars...)
 	val, ok := iter.Next()
 	if !ok {
 		return nil, nil

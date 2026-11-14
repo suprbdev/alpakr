@@ -73,6 +73,8 @@ func resetFlags(args []string) {
 	outputFormat = ""
 	outputFile = ""
 	readStdin = false
+	argStrings = nil
+	argJSON = nil
 	for _, c := range rootCmd.Commands() {
 		c.SilenceUsage = false
 	}
@@ -839,4 +841,43 @@ func runWithStdinExpectError(t *testing.T, input string, args ...string) error {
 		_ = w.Close()
 	}()
 	return runWithArgsExpectError(t, args...)
+}
+
+func TestRun_Vars(t *testing.T) {
+	dataFile := writeTemp(t, "data.json", `{"id":1}`)
+	cfgFile := writeTemp(t, "alpakr.yaml", `
+version: "1"
+source:
+  path: `+dataFile+`
+output:
+  indent: 0
+vars:
+  region: uk
+  opts: {debug: false}
+handlers:
+  root:
+    fields:
+      id: ".id"
+      region: "$region"
+      debug: "$opts.debug"
+`)
+	if got := runWithArgs(t, "run", "-c", cfgFile); got != `{"id":1,"region":"uk","debug":false}`+"\n" {
+		t.Errorf("config vars: %q", got)
+	}
+	if got := runWithArgs(t, "run", "-c", cfgFile, "--arg", "region=eu", "--argjson", `opts={"debug":true}`); got != `{"id":1,"region":"eu","debug":true}`+"\n" {
+		t.Errorf("cli override: %q", got)
+	}
+	for _, bad := range [][]string{{"--arg", "region"}, {"--argjson", "opts={bad"}, {"--arg", "ENV=x"}} {
+		if err := runWithArgsExpectError(t, append([]string{"run", "-c", cfgFile}, bad...)...); err == nil {
+			t.Errorf("%v: expected error", bad)
+		}
+	}
+}
+
+func TestValidate_UsesArgs(t *testing.T) {
+	cfgFile := writeTemp(t, "alpakr.yaml", stdinOnlyConfig+"      r: \"$region\"\n")
+	if err := runWithArgsExpectError(t, "validate", "-c", cfgFile); !strings.Contains(err.Error(), "$region") {
+		t.Errorf("err = %v", err)
+	}
+	runWithArgs(t, "validate", "-c", cfgFile, "--arg", "region=eu")
 }

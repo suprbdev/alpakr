@@ -618,3 +618,37 @@ func TestRun_EachOnNonArrayNamesJQType(t *testing.T) {
 		}
 	}
 }
+
+func TestRun_Vars(t *testing.T) {
+	c := cfg(map[string]config.HandlerConfig{
+		"root": {
+			Each:   true,
+			Input:  ".[$section]",
+			Filter: ".n >= $min",
+			Fields: fields("n", field(".n"), "region", field("$region"), "both", field(`"\($region)-\(.n)"`)),
+		},
+	})
+	e, err := New(c, WithVars(map[string]interface{}{"region": "eu", "min": 2, "section": "items"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := runPlain(e, "root", map[string]interface{}{"items": []interface{}{
+		map[string]interface{}{"n": 1}, map[string]interface{}{"n": 3},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []interface{}{map[string]interface{}{"n": 3, "region": "eu", "both": "eu-3"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %#v, want %#v", got, want)
+	}
+}
+
+func TestCompile_UndefinedVar(t *testing.T) {
+	_, err := New(cfg(map[string]config.HandlerConfig{
+		"root": {Fields: fields("x", field("$missing"))},
+	}))
+	if err == nil || !strings.Contains(err.Error(), "$missing") {
+		t.Errorf("err = %v, want undefined variable error", err)
+	}
+}

@@ -33,6 +33,8 @@ jq '.items[]' big.json | alpakr run    # jq output works too (pretty-printed val
 cat other.json | alpakr run --stdin    # read stdin instead of the configured source (format sniffed unless set)
 alpakr run --limit 10                  # process only the first 10 records
 
+alpakr run --arg region=eu             # jq variable $region (string); --argjson name=<json> for JSON values
+
 alpakr --version                       # print the build version
 ```
 
@@ -85,9 +87,26 @@ handlers:
 
 Unknown keys are errors, reported with the line, section and valid keys — `line 14: unknown key "filtr" in handler (valid keys: source, input, each, filter, fields)` — so typos don't silently change behaviour.
 
+### Variables
+
+`vars:` defines values available to every jq expression as `$name`; `--arg name=value` (string) and `--argjson name=<json>` override or add them.
+
+```yaml
+vars:
+  region: uk
+  min_score: 50
+
+handlers:
+  root:
+    each: true
+    filter: ".score >= $min_score"
+    fields:
+      label: '"\(.name) (\($region))"'
+```
+
 ### Environment variables
 
-Source settings (`path`, `url`, `method`, header values, `body`, `timeout`) and `output.file` expand `${VAR}` and `${VAR:-default}`; an unset `${VAR}` without a default is an error, and `$$` is a literal `$`. jq expressions can read `$ENV.VAR` / `env.VAR`.
+Source settings (`path`, `url`, `method`, header values, `body`, `timeout`), string `vars` and `output.file` expand `${VAR}` and `${VAR:-default}`; an unset `${VAR}` without a default is an error, and `$$` is a literal `$`. jq expressions can read `$ENV.VAR` / `env.VAR`.
 
 ```yaml
 source:
