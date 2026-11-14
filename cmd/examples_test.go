@@ -37,7 +37,7 @@ func TestExamples_Run(t *testing.T) {
 					t.Fatal("empty output")
 				}
 				sc := bufio.NewScanner(strings.NewReader(out))
-				if cfg.SourceFor(h).Format != "ndjson" {
+				if f := cfg.SourceFor(h).Format; f != "ndjson" && f != "csv" {
 					if !json.Valid([]byte(out)) {
 						t.Fatalf("invalid JSON output:\n%s", out)
 					}
