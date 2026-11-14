@@ -27,12 +27,11 @@ func parseYAML(data []byte) (interface{}, error) {
 	if err := yaml.Unmarshal(data, &doc); err != nil {
 		return nil, fmt.Errorf("parsing YAML: %w", err)
 	}
-	stringifyTimestamps(&doc)
-	var v interface{}
-	if err := doc.Decode(&v); err != nil {
+	v, err := yamlToValue(&doc)
+	if err != nil {
 		return nil, fmt.Errorf("parsing YAML: %w", err)
 	}
-	return normalizeYAML(v), nil
+	return v, nil
 }
 
 var utf8BOM = []byte{0xEF, 0xBB, 0xBF}

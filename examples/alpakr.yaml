@@ -29,7 +29,10 @@ version: "1"
 #   - Integers keep full precision (e.g. 64-bit IDs beyond 2^53 are not rounded)
 #   - YAML timestamps (2024-01-01) are kept as their source text strings —
 #     use strptime/fromdate in jq to parse them
-#   - YAML map keys that are not strings (1:, true:) become string keys ("1", "true")
+#   - YAML map keys that are not strings (1:, true:) become string keys ("1", "true");
+#     keys that collide once stringified (1: and 1.0:) are an error
+#   - Numbers beyond the float64 range (1e400) are clamped to ±1.7976931348623157e+308;
+#     JSON output writes NaN as null and ±infinity as ±1.7976931348623157e+308, like jq
 #
 # Stdin piping: if data is piped via stdin, the 'source' config is optional —
 # you can omit the source block entirely. Format is auto-detected by peeking
