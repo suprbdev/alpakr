@@ -21,9 +21,27 @@ type URLSource struct {
 	Timeout time.Duration
 }
 
+// Response is a successful HTTP response.
+type Response struct {
+	Body   io.ReadCloser
+	Header http.Header
+	Status int
+	URL    string // final URL after redirects
+}
+
 // Open performs the HTTP request and returns the response body. The caller
 // must close it. Non-2xx responses are returned as errors.
 func (u *URLSource) Open() (io.ReadCloser, error) {
+	resp, err := u.Fetch()
+	if err != nil {
+		return nil, err
+	}
+	return resp.Body, nil
+}
+
+// Fetch performs the HTTP request like Open and also returns the response
+// metadata.
+func (u *URLSource) Fetch() (*Response, error) {
 	method := u.Method
 	if method == "" {
 		method = http.MethodGet
@@ -65,7 +83,12 @@ func (u *URLSource) Open() (io.ReadCloser, error) {
 		cancel()
 		return nil, fmt.Errorf("fetching %q: HTTP %d", u.URL, resp.StatusCode)
 	}
-	return &timeoutBody{body: resp.Body, timer: timer, timeout: u.Timeout, cancel: cancel, url: u.URL}, nil
+	return &Response{
+		Body:   &timeoutBody{body: resp.Body, timer: timer, timeout: u.Timeout, cancel: cancel, url: u.URL},
+		Header: resp.Header,
+		Status: resp.StatusCode,
+		URL:    resp.Request.URL.String(),
+	}, nil
 }
 
 // timeoutBody cancels the request when a single Read blocks for longer than

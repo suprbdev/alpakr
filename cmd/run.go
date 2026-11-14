@@ -87,13 +87,47 @@ func runRun(_ *cobra.Command, _ []string) error {
 		format = ""
 	}
 
+	live := &liveOutput{}
+	if srcCfg.Pagination != nil && !fromStdin {
+		pages, err := newPages(srcCfg)
+		if err != nil {
+			return err
+		}
+		pages.BeforeFetch = live.Flush
+		pages.Warn = func(msg string) { fmt.Fprintln(os.Stderr, "Warning:", msg) }
+		return process(cfg, eng, pages, true, live, nil)
+	}
+
 	in, err := openInput(srcCfg, fromStdin)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = in.Close() }()
 	opts := []source.Option{source.CSVDelimiter(srcCfg.DelimiterRune()), source.CSVHeader(srcCfg.HasHeader())}
-	return process(cfg, eng, in, format, opts, inputInfo(srcCfg, fromStdin))
+	vals, err := source.NewValues(&flushingReader{r: in, out: live}, format, opts...)
+	if err != nil {
+		return err
+	}
+	return process(cfg, eng, vals, format == "ndjson" || format == "csv", live, inputInfo(srcCfg, fromStdin))
+}
+
+func urlSource(srcCfg config.SourceConfig) source.URLSource {
+	return source.URLSource{
+		URL:     srcCfg.URL,
+		Method:  srcCfg.Method,
+		Headers: srcCfg.Headers,
+		Body:    srcCfg.Body,
+		Timeout: srcCfg.TimeoutDuration(),
+	}
+}
+
+func newPages(srcCfg config.SourceConfig) (*source.Pages, error) {
+	p := srcCfg.Pagination
+	compiled, err := source.CompilePagination(p.Next, p.Records)
+	if err != nil {
+		return nil, err
+	}
+	return source.NewPages(urlSource(srcCfg), srcCfg.Format, compiled, p.MaxPagesLimit()), nil
 }
 
 // openInput opens stdin, the configured URL's response body or the
@@ -103,13 +137,8 @@ func openInput(srcCfg config.SourceConfig, fromStdin bool) (io.ReadCloser, error
 	case fromStdin:
 		return io.NopCloser(os.Stdin), nil
 	case srcCfg.URL != "":
-		return (&source.URLSource{
-			URL:     srcCfg.URL,
-			Method:  srcCfg.Method,
-			Headers: srcCfg.Headers,
-			Body:    srcCfg.Body,
-			Timeout: srcCfg.TimeoutDuration(),
-		}).Open()
+		u := urlSource(srcCfg)
+		return u.Open()
 	}
 	f, err := os.Open(srcCfg.Path)
 	if err != nil {
@@ -135,17 +164,12 @@ func inputInfo(srcCfg config.SourceConfig, fromStdin bool) os.FileInfo {
 	return fi
 }
 
-// process runs the handler over the values in in. A single JSON value or
-// YAML document is transformed as a whole and written as one document. NDJSON
-// and CSV input, or input holding several values or documents, is streamed:
-// each value (row) is a record whose result is written as soon as it is
-// produced.
-func process(cfg *config.Config, eng *engine.Engine, in io.Reader, format string, opts []source.Option, inInfo os.FileInfo) (err error) {
-	fr := &flushingReader{r: in}
-	vals, err := source.NewValues(fr, format, opts...)
-	if err != nil {
-		return err
-	}
+// process runs the handler over vals. A single JSON value or YAML document is
+// transformed as a whole and written as one document. When stream is set
+// (NDJSON, CSV, paginated sources), or the input holds several values or
+// documents, each value is a record whose result is written as soon as it
+// is produced.
+func process(cfg *config.Config, eng *engine.Engine, vals source.Values, stream bool, live *liveOutput, inInfo os.FileInfo) (err error) {
 	first, ok, err := vals.Next()
 	if err != nil {
 		return err
@@ -156,7 +180,7 @@ func process(cfg *config.Config, eng *engine.Engine, in io.Reader, format string
 
 	var second interface{}
 	hasSecond := false
-	if format != "ndjson" && format != "csv" {
+	if !stream {
 		if second, hasSecond, err = vals.Next(); err != nil {
 			return err
 		}
@@ -172,7 +196,7 @@ func process(cfg *config.Config, eng *engine.Engine, in io.Reader, format string
 	if err := checkNotInput(inInfo, cfg.Output.File); err != nil {
 		return err
 	}
-	return writeOutput(cfg, fr, func(w output.Writer) error {
+	return writeOutput(cfg, live, func(w output.Writer) error {
 		written := 0
 		emit := func(record interface{}) error {
 			remaining := 0
@@ -215,9 +239,9 @@ func process(cfg *config.Config, eng *engine.Engine, in io.Reader, format string
 }
 
 // writeOutput opens the configured output, runs write against it and
-// flushes. When fr is non-nil it flushes the output before each further
-// input read, so streamed results appear while waiting on slow input.
-func writeOutput(cfg *config.Config, fr *flushingReader, write func(output.Writer) error) (err error) {
+// flushes. When live is non-nil it is pointed at the output for the
+// duration, so streamed results are flushed while waiting on slow input.
+func writeOutput(cfg *config.Config, live *liveOutput, write func(output.Writer) error) (err error) {
 	sink, err := openSink(cfg.Output.File)
 	if err != nil {
 		return err
@@ -227,9 +251,9 @@ func writeOutput(cfg *config.Config, fr *flushingReader, write func(output.Write
 			err = cerr
 		}
 	}()
-	if fr != nil {
-		fr.w = sink.buf
-		defer func() { fr.w = nil }()
+	if live != nil {
+		live.w = sink.buf
+		defer func() { live.w = nil }()
 	}
 	w, err := output.New(cfg.Output.Format, *cfg.Output.Indent, sink, output.Delimiter(cfg.Output.DelimiterRune()))
 	if err != nil {
@@ -288,19 +312,33 @@ func (s *sink) Close() error {
 	return nil
 }
 
-// flushingReader flushes w, when set, before every read from r. Streaming
-// output is therefore batched while input is plentiful, yet never held back
-// while the process waits on a slow or live input such as `tail -f`.
-type flushingReader struct {
-	r io.Reader
+// liveOutput is the buffered output currently being streamed to, if any.
+type liveOutput struct {
 	w *bufio.Writer
 }
 
+// Flush writes buffered output, if an output is open.
+func (l *liveOutput) Flush() error {
+	if l == nil || l.w == nil {
+		return nil
+	}
+	if err := l.w.Flush(); err != nil {
+		return fmt.Errorf("writing output: %w", err)
+	}
+	return nil
+}
+
+// flushingReader flushes out before every read from r. Streaming output is
+// therefore batched while input is plentiful, yet never held back while the
+// process waits on a slow or live input such as `tail -f`.
+type flushingReader struct {
+	r   io.Reader
+	out *liveOutput
+}
+
 func (f *flushingReader) Read(p []byte) (int, error) {
-	if f.w != nil {
-		if err := f.w.Flush(); err != nil {
-			return 0, fmt.Errorf("writing output: %w", err)
-		}
+	if err := f.out.Flush(); err != nil {
+		return 0, err
 	}
 	return f.r.Read(p)
 }

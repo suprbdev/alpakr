@@ -389,7 +389,7 @@ handlers:
 func TestFlushingReader_FlushesBeforeRead(t *testing.T) {
 	var out bytes.Buffer
 	bw := bufio.NewWriter(&out)
-	fr := &flushingReader{r: strings.NewReader("x"), w: bw}
+	fr := &flushingReader{r: strings.NewReader("x"), out: &liveOutput{w: bw}}
 	if _, err := bw.WriteString("pending"); err != nil {
 		t.Fatal(err)
 	}
@@ -927,5 +927,56 @@ handlers:
 	}
 	if got := runWithArgs(t, "run", "-c", cfgFile, "--limit", "1"); got != "name,id,tags\n\"a, b\",1,\"[\"\"x\"\"]\"\n" {
 		t.Errorf("limited output = %q", got)
+	}
+}
+
+func TestRun_PaginatedSource(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Query().Get("cursor") {
+		case "":
+			_, _ = io.WriteString(w, `{"items":[{"id":1},{"id":2}],"next":"?cursor=b"}`)
+		case "b":
+			_, _ = io.WriteString(w, `{"items":[{"id":3}],"next":null}`)
+		default:
+			http.Error(w, "unexpected", http.StatusBadRequest)
+		}
+	}))
+	defer srv.Close()
+
+	cfgFile := writeTemp(t, "alpakr.yaml", `
+version: "1"
+source:
+  url: `+srv.URL+`/api
+  pagination:
+    next: ".next"
+    records: ".items"
+handlers:
+  root:
+    fields:
+      id: ".id"
+`)
+	if got := runWithArgs(t, "run", "-c", cfgFile); got != "{\"id\":1}\n{\"id\":2}\n{\"id\":3}\n" {
+		t.Errorf("output = %q", got)
+	}
+	if got := runWithArgs(t, "run", "-c", cfgFile, "-f", "csv", "--limit", "2"); got != "id\n1\n2\n" {
+		t.Errorf("csv limited output = %q", got)
+	}
+	runWithArgs(t, "validate", "-c", cfgFile)
+}
+
+func TestValidate_BadPaginationExpr(t *testing.T) {
+	cfgFile := writeTemp(t, "alpakr.yaml", `
+version: "1"
+source:
+  url: https://example.com/api
+  pagination:
+    next: ".[[["
+handlers:
+  root:
+    fields:
+      id: ".id"
+`)
+	if err := runWithArgsExpectError(t, "validate", "-c", cfgFile); !strings.Contains(err.Error(), "pagination next") {
+		t.Errorf("err = %v", err)
 	}
 }

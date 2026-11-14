@@ -45,9 +45,29 @@ type SourceConfig struct {
 	Delimiter string `yaml:"delimiter"` // csv only: single character; default "," ("\t" for .tsv)
 	Header    *bool  `yaml:"header"`    // csv only: first row names the columns; default true
 
+	Pagination *PaginationConfig `yaml:"pagination"` // url only: follow next-page links
+
 	// FormatDetected reports that Format was inferred from the path or URL
 	// extension rather than set in the config.
 	FormatDetected bool `yaml:"-"`
+}
+
+// PaginationConfig describes how to walk a paginated URL source.
+type PaginationConfig struct {
+	Next     string `yaml:"next"`      // jq: next page URL (absolute or relative), or null to stop
+	Records  string `yaml:"records"`   // jq: array of records in each page; default: the page itself
+	MaxPages *int   `yaml:"max_pages"` // default DefaultMaxPages; 0 = unlimited
+}
+
+// DefaultMaxPages bounds pagination when max_pages is not set.
+const DefaultMaxPages = 1000
+
+// MaxPagesLimit returns the configured page limit; 0 means unlimited.
+func (p PaginationConfig) MaxPagesLimit() int {
+	if p.MaxPages == nil {
+		return DefaultMaxPages
+	}
+	return *p.MaxPages
 }
 
 // DefaultTimeout is the URL source timeout used when none is configured.

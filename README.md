@@ -190,6 +190,23 @@ Any JSON or YAML input holding more than one top-level value — NDJSON, concate
 
 `--limit N` works with NDJSON sources and stops after N records have been written (filtered-out records don't count toward the limit).
 
+### Paginated APIs
+
+`pagination:` on a URL source follows next-page links and streams the records of every page:
+
+```yaml
+source:
+  url: https://api.example.com/v1/items?per_page=100
+  headers:
+    Authorization: "Bearer ${API_TOKEN}"
+  pagination:
+    next: ".links.next"   # jq → next URL (absolute or relative) or null to stop
+    records: ".data"      # jq → array of records per page (default: the page itself)
+    max_pages: 50         # default 1000; 0 = unlimited
+```
+
+Pages are fetched lazily, so `--limit` stops further requests. Expressions also get `$response` (`url`, `status`, lower-cased `headers`) — e.g. `$response.headers.link` for Link-header pagination.
+
 ### CSV
 
 `.csv` (and tab-separated `.tsv`) sources stream row by row, like NDJSON: each row is an object keyed by the header, and every value is a string — convert with `to_int`, `to_float` or `tonumber`. `-f csv` writes one row per record with the header taken from the fields in config order; nested values become compact JSON. See [`examples/csv`](./examples/csv).
