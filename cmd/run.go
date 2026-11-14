@@ -88,7 +88,7 @@ func runStream(cfg *config.Config, eng *engine.Engine, srcCfg config.SourceConfi
 	if err != nil {
 		return err
 	}
-	defer in.Close()
+	defer func() { _ = in.Close() }()
 
 	sink, err := openSink(cfg.Output.File)
 	if err != nil {

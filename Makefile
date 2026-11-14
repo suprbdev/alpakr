@@ -2,7 +2,7 @@ BIN := alpakr
 BUILD_DIR := ./bin
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
-.PHONY: help build run test clean install lint release
+.PHONY: help build run test clean install fmt lint tidy release
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*##"}; {printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
@@ -26,8 +26,13 @@ clean: ## Remove build artifacts
 install: ## Install binary to GOPATH/bin
 	go install .
 
-lint: ## Run go vet
+fmt: ## Format code with gofmt
+	gofmt -w .
+
+lint: ## Run gofmt check, go vet and golangci-lint (if installed)
+	@test -z "$$(gofmt -l .)" || { echo "Files need gofmt:"; gofmt -l .; exit 1; }
 	go vet ./...
+	@if command -v golangci-lint >/dev/null; then golangci-lint run ./...; else echo "golangci-lint not installed; skipping (CI runs it)"; fi
 
 tidy: ## Tidy go.mod and go.sum
 	go mod tidy

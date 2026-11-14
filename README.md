@@ -362,7 +362,8 @@ The [`examples/`](./examples) directory contains a fully annotated reference con
 make build    # build ./bin/alpakr
 make test     # run tests
 make test-v   # run tests verbose
-make lint     # go vet
+make fmt      # gofmt -w
+make lint     # gofmt check, go vet, golangci-lint
 make tidy     # go mod tidy
 make clean    # remove build artifacts
 ```
