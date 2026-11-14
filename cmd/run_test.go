@@ -488,3 +488,62 @@ handlers:
 		t.Errorf("output = %q, want %q", got, want)
 	}
 }
+
+func TestRun_NdjsonRefusesToOverwriteInput(t *testing.T) {
+	dataFile := writeTemp(t, "events.ndjson", "{\"a\":1}\n{\"a\":2}\n")
+	cfgFile := writeTemp(t, "alpakr.yaml", `
+version: "1"
+source:
+  path: `+dataFile+`
+handlers:
+  root:
+    fields:
+      a: ".a"
+`)
+	err := runWithArgsExpectError(t, "run", "-c", cfgFile, "-o", dataFile)
+	if !strings.Contains(err.Error(), "is the input") {
+		t.Errorf("err = %v, want same-file error", err)
+	}
+	if got, _ := os.ReadFile(dataFile); string(got) != "{\"a\":1}\n{\"a\":2}\n" {
+		t.Errorf("input was modified: %q", got)
+	}
+}
+
+func TestLimit_NdjsonStopsAfterLimit(t *testing.T) {
+	dataFile := writeTemp(t, "data.ndjson", "{\"id\":1}\n{bad json\n")
+	cfgFile := writeTemp(t, "alpakr.yaml", `
+version: "1"
+source:
+  path: `+dataFile+`
+handlers:
+  root:
+    fields:
+      id: ".id"
+`)
+	if got := runWithArgs(t, "run", "-c", cfgFile, "--limit", "1"); got != "{\"id\":1}\n" {
+		t.Errorf("output = %q", got)
+	}
+}
+
+func TestRun_FormatsCaseInsensitive(t *testing.T) {
+	dataFile := writeTemp(t, "data.json", `{"id":1}`)
+	cfgFile := writeTemp(t, "alpakr.yaml", `
+version: "1"
+source:
+  path: `+dataFile+`
+  format: JSON
+output:
+  format: Json
+  indent: 0
+handlers:
+  root:
+    fields:
+      id: ".id"
+`)
+	if got := runWithArgs(t, "run", "-c", cfgFile); got != "{\"id\":1}\n" {
+		t.Errorf("output = %q", got)
+	}
+	if got := runWithArgs(t, "run", "-c", cfgFile, "-f", "YAML"); got != "id: 1\n" {
+		t.Errorf("-f YAML output = %q", got)
+	}
+}

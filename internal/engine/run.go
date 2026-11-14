@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"errors"
 	"fmt"
 )
 
@@ -11,7 +12,7 @@ func (e *Engine) Run(handlerName string, data interface{}) (interface{}, error) 
 	if !ok {
 		return nil, fmt.Errorf("handler %q not found", handlerName)
 	}
-	return h.run(data, 0)
+	return h.run(data, 0, 0)
 }
 
 // RunLimit is like Run, but an 'each' handler stops once limit records have
@@ -21,10 +22,27 @@ func (e *Engine) RunLimit(handlerName string, data interface{}, limit int) (inte
 	if !ok {
 		return nil, fmt.Errorf("handler %q not found", handlerName)
 	}
-	return h.run(data, limit)
+	return h.run(data, limit, 0)
 }
 
-func (h *compiledHandler) run(data interface{}, limit int) (interface{}, error) {
+// maxDepth bounds nested handler calls so a handler that references itself
+// without a terminating input fails cleanly instead of overflowing the stack.
+const maxDepth = 1000
+
+// depthError is returned unwrapped through every level so the message stays
+// short rather than repeating the field path maxDepth times.
+type depthError struct {
+	handler string
+}
+
+func (e *depthError) Error() string {
+	return fmt.Sprintf("handler %q: nested more than %d levels deep (recursive handler reference?)", e.handler, maxDepth)
+}
+
+func (h *compiledHandler) run(data interface{}, limit, depth int) (interface{}, error) {
+	if depth > maxDepth {
+		return nil, &depthError{handler: h.name}
+	}
 	if h.input != nil {
 		var err error
 		data, err = h.input.eval(data)
@@ -34,7 +52,7 @@ func (h *compiledHandler) run(data interface{}, limit int) (interface{}, error) 
 	}
 
 	if !h.each {
-		return h.runOne(data)
+		return h.runOne(data, depth)
 	}
 	items, ok := data.([]interface{})
 	if !ok {
@@ -46,7 +64,7 @@ func (h *compiledHandler) run(data interface{}, limit int) (interface{}, error) 
 	}
 	results := make([]interface{}, 0, n)
 	for _, item := range items {
-		out, err := h.runOne(item)
+		out, err := h.runOne(item, depth)
 		if err != nil {
 			return nil, err
 		}
@@ -62,7 +80,7 @@ func (h *compiledHandler) run(data interface{}, limit int) (interface{}, error) 
 
 // runOne applies the filter and builds the output object for a single record.
 // It returns nil when the filter rejects the record.
-func (h *compiledHandler) runOne(data interface{}) (interface{}, error) {
+func (h *compiledHandler) runOne(data interface{}, depth int) (interface{}, error) {
 	if h.filter != nil {
 		pass, err := h.filter.eval(data)
 		if err != nil {
@@ -72,13 +90,13 @@ func (h *compiledHandler) runOne(data interface{}) (interface{}, error) {
 			return nil, nil
 		}
 	}
-	return buildObject(h.fields, data)
+	return buildObject(h.fields, data, depth)
 }
 
-func buildObject(fields []compiledField, data interface{}) (interface{}, error) {
+func buildObject(fields []compiledField, data interface{}, depth int) (interface{}, error) {
 	out := make(map[string]interface{}, len(fields))
 	for i := range fields {
-		val, err := fields[i].eval(data)
+		val, err := fields[i].eval(data, depth)
 		if err != nil {
 			return nil, err
 		}
@@ -87,7 +105,7 @@ func buildObject(fields []compiledField, data interface{}) (interface{}, error) 
 	return out, nil
 }
 
-func (f *compiledField) eval(data interface{}) (interface{}, error) {
+func (f *compiledField) eval(data interface{}, depth int) (interface{}, error) {
 	if f.code != nil {
 		val, err := f.code.eval(data)
 		if err != nil {
@@ -108,13 +126,17 @@ func (f *compiledField) eval(data interface{}) (interface{}, error) {
 	}
 
 	if f.handler != nil {
-		val, err := f.handler.run(data, 0)
+		val, err := f.handler.run(data, 0, depth+1)
 		if err != nil {
+			var de *depthError
+			if errors.As(err, &de) {
+				return nil, err
+			}
 			return nil, fmt.Errorf("%s: %w", f.path, err)
 		}
 		return val, nil
 	}
-	return buildObject(f.fields, data)
+	return buildObject(f.fields, data, depth)
 }
 
 // eval returns the first output of x for input v, or nil if it produces none.

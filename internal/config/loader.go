@@ -51,7 +51,7 @@ func validate(cfg *Config, configPath string) error {
 	if cfg.Output.Indent != nil && *cfg.Output.Indent < 0 {
 		return fmt.Errorf("config: output.indent must be >= 0")
 	}
-	switch cfg.Output.Format {
+	switch strings.ToLower(cfg.Output.Format) {
 	case "", "json", "yaml", "yml":
 	default:
 		return fmt.Errorf("config: output.format must be json or yaml (got %q)", cfg.Output.Format)
@@ -97,7 +97,7 @@ func validateSourceConfig(label string, s SourceConfig) error {
 	if s.Path != "" && s.URL != "" {
 		return fmt.Errorf("config: %s cannot have both 'path' and 'url'", label)
 	}
-	switch s.Format {
+	switch strings.ToLower(s.Format) {
 	case "", "json", "yaml", "yml", "ndjson":
 	default:
 		return fmt.Errorf("config: %s: unknown format %q (want json, yaml or ndjson)", label, s.Format)
@@ -123,6 +123,7 @@ func validateSourceConfig(label string, s SourceConfig) error {
 }
 
 func applyDefaults(cfg *Config, _ string) {
+	cfg.Output.Format = strings.ToLower(cfg.Output.Format)
 	if cfg.Output.Format == "" {
 		cfg.Output.Format = "json"
 	}
@@ -139,6 +140,7 @@ func applyDefaults(cfg *Config, _ string) {
 }
 
 func normaliseSource(s *SourceConfig) {
+	s.Format = strings.ToLower(s.Format)
 	detectFormat(s)
 	if s.Method != "" {
 		s.Method = strings.ToUpper(s.Method)
