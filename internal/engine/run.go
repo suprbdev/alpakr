@@ -56,9 +56,12 @@ func (h *compiledHandler) run(data interface{}, limit, depth int) (interface{}, 
 	if !h.each {
 		return h.runOne(data, depth)
 	}
+	if data == nil {
+		return []interface{}{}, nil
+	}
 	items, ok := data.([]interface{})
 	if !ok {
-		return nil, fmt.Errorf("handler %q: 'each: true' requires array input, got %T", h.name, data)
+		return nil, fmt.Errorf("handler %q: 'each: true' requires array input, got %s", h.name, jqType(data))
 	}
 	n := len(items)
 	if limit > 0 && limit < n {
@@ -174,6 +177,23 @@ func lookupPath(keys []string, v interface{}) (interface{}, bool) {
 		}
 	}
 	return v, true
+}
+
+// jqType names v's type as jq's type function would.
+func jqType(v interface{}) string {
+	switch v.(type) {
+	case nil:
+		return "null"
+	case bool:
+		return "boolean"
+	case string:
+		return "string"
+	case []interface{}:
+		return "array"
+	case map[string]interface{}:
+		return "object"
+	}
+	return "number"
 }
 
 func isTruthy(v interface{}) bool {
