@@ -4,6 +4,12 @@
 # it is a complete reference for all supported configuration.
 # =============================================================================
 
+# Strict parsing: unknown keys anywhere in this file (e.g. a typo such as
+# 'filtr:' or 'inptu:') are an error naming the line, the section and its
+# valid keys:
+#   parsing config alpakr.yaml: line 14: unknown key "filtr" in handler
+#   (valid keys: source, input, each, filter, fields)
+#
 # version: config schema version. Currently only "1" is valid; any other value
 # is an error. Optional — omitting it is treated as "1".
 version: "1"

@@ -3,6 +3,8 @@ package config
 import (
 	"fmt"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
 type Config struct {
@@ -58,60 +60,60 @@ type FieldConfig struct {
 	Fields  map[string]FieldConfig // inline nested object
 }
 
-func (f *FieldConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
-	// Try plain string first (jq expression)
-	var expr string
-	if err := unmarshal(&expr); err == nil {
-		f.Expr = expr
+// UnmarshalYAML decodes a field from a scalar (jq expression) or a mapping
+// with 'handler' (sub-handler reference) or 'fields' (inline object) and an
+// optional 'input'. Unknown keys are rejected.
+func (f *FieldConfig) UnmarshalYAML(n *yaml.Node) error {
+	switch n.Kind {
+	case yaml.ScalarNode:
+		if n.ShortTag() == "!!null" {
+			return fmt.Errorf("line %d: field value is empty; expected a jq expression", n.Line)
+		}
+		f.Expr = n.Value
 		return nil
+	case yaml.MappingNode:
+	case yaml.AliasNode:
+		return f.UnmarshalYAML(n.Alias)
+	default:
+		return fmt.Errorf("line %d: field must be a jq expression string, {handler, input} mapping, or {input, fields} inline object", n.Line)
 	}
 
-	// Decode as raw map to inspect dispatch keys
-	var raw map[string]interface{}
-	if err := unmarshal(&raw); err != nil {
-		return fmt.Errorf("field must be a jq expression string, {handler, input} mapping, or {input, fields} inline object")
-	}
-
-	_, hasHandler := raw["handler"]
-	_, hasFields := raw["fields"]
-
-	if hasHandler && hasFields {
-		return fmt.Errorf("field cannot have both 'handler' and 'fields' keys")
-	}
-
-	// Sub-handler reference: keyed by 'handler'
-	if hasHandler {
-		h, ok := raw["handler"].(string)
-		if !ok || h == "" {
-			return fmt.Errorf("field 'handler' must be a non-empty string")
+	var handlerNode, inputNode, fieldsNode *yaml.Node
+	for i := 0; i+1 < len(n.Content); i += 2 {
+		k, v := n.Content[i], n.Content[i+1]
+		switch k.Value {
+		case "handler":
+			handlerNode = v
+		case "input":
+			inputNode = v
+		case "fields":
+			fieldsNode = v
+		default:
+			return fmt.Errorf("line %d: unknown key %q in field (valid keys: handler, input, fields)", k.Line, k.Value)
 		}
-		f.Handler = h
-		if inp, ok := raw["input"].(string); ok {
-			f.Input = inp
+	}
+
+	if inputNode != nil {
+		if inputNode.Kind != yaml.ScalarNode || inputNode.ShortTag() == "!!null" {
+			return fmt.Errorf("line %d: field 'input' must be a jq expression string", inputNode.Line)
 		}
+		f.Input = inputNode.Value
+	}
+
+	switch {
+	case handlerNode != nil && fieldsNode != nil:
+		return fmt.Errorf("line %d: field cannot have both 'handler' and 'fields' keys", n.Line)
+	case handlerNode != nil:
+		if handlerNode.Kind != yaml.ScalarNode || handlerNode.ShortTag() != "!!str" || handlerNode.Value == "" {
+			return fmt.Errorf("line %d: field 'handler' must be a non-empty string", handlerNode.Line)
+		}
+		f.Handler = handlerNode.Value
 		return nil
+	case fieldsNode != nil:
+		if fieldsNode.Kind != yaml.MappingNode || len(fieldsNode.Content) == 0 {
+			return fmt.Errorf("line %d: inline 'fields' must be a non-empty map", fieldsNode.Line)
+		}
+		return fieldsNode.Decode(&f.Fields)
 	}
-
-	// Inline nested object: keyed by 'fields'
-	if hasFields {
-		if inp, ok := raw["input"].(string); ok {
-			f.Input = inp
-		}
-		// Re-unmarshal just the 'fields' value into map[string]FieldConfig
-		type inlineShape struct {
-			Input  string                 `yaml:"input"`
-			Fields map[string]FieldConfig `yaml:"fields"`
-		}
-		var shape inlineShape
-		if err := unmarshal(&shape); err != nil {
-			return fmt.Errorf("inline fields: %w", err)
-		}
-		if len(shape.Fields) == 0 {
-			return fmt.Errorf("inline 'fields' must be a non-empty map")
-		}
-		f.Fields = shape.Fields
-		return nil
-	}
-
-	return fmt.Errorf("field map must have a 'handler' key (sub-handler) or a 'fields' key (inline object)")
+	return fmt.Errorf("line %d: field map must have a 'handler' key (sub-handler) or a 'fields' key (inline object)", n.Line)
 }

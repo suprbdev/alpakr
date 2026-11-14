@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -486,6 +487,51 @@ func TestURLOptions_TimeoutInvalid(t *testing.T) {
 	} {
 		if _, err := loadString(t, "version: \"1\"\nsource:\n"+src+"handlers:\n  root:\n    fields:\n      id: \".id\"\n"); err == nil {
 			t.Errorf("%s: expected error", name)
+		}
+	}
+}
+
+func TestLoadStrict_UnknownKeys(t *testing.T) {
+	for name, tc := range map[string]struct{ yaml, want string }{
+		"handler": {"handlers:\n  root:\n    filtr: x\n    fields:\n      a: \".a\"\n",
+			`line 4: unknown key "filtr" in handler (valid keys: source, input, each, filter, fields)`},
+		"top level": {"sorce:\n  path: x.json\nhandlers:\n  root:\n    fields:\n      a: \".a\"\n",
+			`line 2: unknown key "sorce" in top level`},
+		"source": {"source:\n  path: x.json\n  hedaers: {a: b}\nhandlers:\n  root:\n    fields:\n      a: \".a\"\n",
+			`line 4: unknown key "hedaers" in source`},
+		"output": {"output:\n  indnet: 2\nhandlers:\n  root:\n    fields:\n      a: \".a\"\n",
+			`line 3: unknown key "indnet" in output (valid keys: format, indent, file)`},
+		"field": {"handlers:\n  root:\n    fields:\n      loc:\n        handler: root\n        inptu: \".x\"\n",
+			`line 7: unknown key "inptu" in field (valid keys: handler, input, fields)`},
+		"nested inline field": {"handlers:\n  root:\n    fields:\n      loc:\n        fields:\n          city:\n            fields: {a: \".a\"}\n            extra: 1\n",
+			`line 9: unknown key "extra" in field`},
+	} {
+		_, err := loadString(t, "version: \"1\"\n"+tc.yaml)
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: err = %v, want it to contain %q", name, err, tc.want)
+		}
+	}
+}
+
+func TestLoadStrict_FieldShapes(t *testing.T) {
+	for name, field := range map[string]string{
+		"sequence":        "[1]",
+		"handler not str": "{handler: [x]}",
+		"input not str":   "{handler: root, input: {a: 1}}",
+		"empty fields":    "{fields: {}}",
+	} {
+		_, err := loadString(t, "version: \"1\"\nhandlers:\n  root:\n    fields:\n      a: "+field+"\n")
+		if err == nil || !strings.Contains(err.Error(), "line 5:") {
+			t.Errorf("%s: err = %v, want line-numbered error", name, err)
+		}
+	}
+}
+
+func TestLoadStrict_ScalarFieldForms(t *testing.T) {
+	cfg := mustLoad(t, "version: \"1\"\nhandlers:\n  root:\n    fields:\n      n: 5\n      b: true\n      q: '\"lit\"'\n")
+	for name, want := range map[string]string{"n": "5", "b": "true", "q": `"lit"`} {
+		if got := cfg.Handlers["root"].Fields[name].Expr; got != want {
+			t.Errorf("%s: Expr = %q, want %q", name, got, want)
 		}
 	}
 }
